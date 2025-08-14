@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "NEW HIDEJOBS EXTENSIOn",
+  "description": "Injects a hidejobs-panel-ui world shadow element with auto/manual job support",
+  "version": "1.1",
+  "icons": {
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://app.hidejobs.com/*"
+  ],
+  "externally_connectable": {
+    "matches": [
+      "https://app.hidejobs.com/*"
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "48": "icon.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": [
+        "https://*.hidejobs.com/*",
+        "https://hidejobs.com/*"
+      ],
+      "js": ["inject-shadow-ui.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.hh.ru/vacancy/*"],
+      "js": ["content-hh.ru-scraper.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.zarplata.ru/vacancy/*"],
+      "js": ["content-zarplata.ru-scraper.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
