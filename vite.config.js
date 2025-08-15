@@ -35,6 +35,7 @@ export default defineConfig({
         "inject-shadow-ui": path.resolve(__dirname, 'src/content-scripts/inject-shadow-ui.jsx'),
         "content-hh.ru-scraper": path.resolve(__dirname, 'src/content-scripts/content-hh.ru-scraper.js'),
         "content-zarplata.ru-scraper": path.resolve(__dirname, 'src/content-scripts/content-zarplata.ru-scraper.js'),
+        "content-linkedin-scraper": path.resolve(__dirname, 'src/content-scripts/content-linkedin-scraper.js'),
       },
       output: {
         entryFileNames: '[name].js'

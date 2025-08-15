@@ -6,38 +6,38 @@ const { Option } = Select;
 
 const categoryPairs = [
   [
-    { key: "salary", label: "Зарплата" },
-    { key: "employment_type", label: "Тип занятости" },
+    { key: "salary", label: "Salary" },
+    { key: "employment_type", label: "Employment type" },
   ],
   [
-    { key: "job_required_skills", label: "Ключевые навыки" },
-    { key: "work_format", label: "Формат работы" },
+    { key: "job_required_skills", label: "Key skills" },
+    { key: "work_format", label: "Work format" },
   ],
   [
-    { key: "job_location", label: "Локация" },
-    { key: "job_description", label: "Описание вакансии" },
+    { key: "job_location", label: "Location" },
+    { key: "job_description", label: "Job description" },
   ],
 ];
 
-const StilponPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handleOpenJob }) => {
+const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handleOpenJob }) => {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("bookmarked");
   const [rating, setRating] = useState(0);
   const [notes, setNotes] = useState("");
 
   const jobStatuses = [
-    { key: "bookmarked", label: "В избранном" },
-    { key: "applying", label: "Планирую отклик" },
-    { key: "applied", label: "Откликнулся" },
-    { key: "interviewing", label: "Собеседование" },
-    { key: "negotiating", label: "Переговоры" },
+    { key: "bookmarked", label: "Bookmarked" },
+    { key: "applying", label: "Applying" },
+    { key: "applied", label: "Applied" },
+    { key: "interviewing", label: "Interviewing" },
+    { key: "negotiating", label: "Negotiating" },
   ];
 
-  /* Приём данных от контент-скрипта */
+  /* Receive data from content script */
   useEffect(() => {
     const handleMessage = (e) => {
-      if (e.data?.type === "stilpon-job-data") {
-        console.log("🟡 Получены данные вакансии:", e.data.payload);
+      if (e.data?.type === "hidejobs-job-data") {
+        console.log("🟡 Job data received:", e.data.payload);
         setData(e.data.payload);
       }
     };
@@ -45,7 +45,7 @@ const StilponPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handl
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
-  /* Проверяем, сохранена ли вакансия */
+  /* Check if job is saved */
   useEffect(() => {
     setIsJobSaved(false);
     setStatus("bookmarked");
@@ -68,20 +68,20 @@ const StilponPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handl
   }, [data?.externalJobId, setIsJobSaved, setTrackedJobId]);
 
   return {
-    title: "Стильпон",
+    title: "HideJobs",
     content: !data ? (
       <Skeleton active />
     ) : (
       <>
-        {/* Название и компания */}
+        {/* Title and company */}
         {data.job_title && (
-          <p className="text-2xl font-semibold text-stilpon-700 mb-0">{data.job_title}</p>
+          <p className="text-2xl font-semibold text-hidejobs-700 mb-0">{data.job_title}</p>
         )}
         {data.company_name && (
           <p className="text-base text-gray-600 mb-3">{data.company_name}</p>
         )}
 
-        {/* Таблица категорий */}
+        {/* Categories table */}
         <table className="w-full mb-4 text-sm">
           <tbody>
             {categoryPairs.map((pair, rowIdx) => (
@@ -105,18 +105,18 @@ const StilponPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handl
 
         <div className="h-px bg-gray-200 w-full mb-4 mt-6" />
 
-        {/* Сохранено */}
+        {/* Saved */}
         {isJobSaved ? (
           <div className="flex justify-center">
             <Button onClick={handleOpenJob} type="primary" size="large">
-              Перейти к вакансии
+              Open saved job
             </Button>
           </div>
         ) : (
           <>
-            {/* Статус */}
+            {/* Status */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Статус</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Status</label>
               <Select value={status} style={{ width: "100%" }} onChange={setStatus} className="text-sm">
                 {jobStatuses.map((s) => (
                   <Option key={s.key} value={s.key}>
@@ -126,20 +126,20 @@ const StilponPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handl
               </Select>
             </div>
 
-            {/* Интерес */}
+            {/* Interest */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Интерес</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Interest</label>
               <Rate value={rating} onChange={setRating} />
             </div>
 
-            {/* Заметки */}
+            {/* Notes */}
             <div>
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Заметки</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Notes</label>
               <Input.TextArea
                 rows={4}
                 style={{ resize: "none" }}
                 className="text-sm"
-                placeholder="Добавьте заметки по вакансии"
+                placeholder="Add notes about this job"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
@@ -156,4 +156,4 @@ const StilponPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handl
   };
 };
 
-export default StilponPanelContent;
+export default HideJobsPanelContent;

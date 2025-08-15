@@ -5,14 +5,14 @@ const { Option } = Select;
 const { TextArea } = Input;
 
 const jobStatuses = [
-  { key: "bookmarked", label: "В избранном" },
-  { key: "applying", label: "Планирую отклик" },
-  { key: "applied", label: "Откликнулся" },
-  { key: "interviewing", label: "Собеседование" },
-  { key: "negotiating", label: "Переговоры" },
+  { key: "bookmarked", label: "Bookmarked" },
+  { key: "applying", label: "Planning to apply" },
+  { key: "applied", label: "Applied" },
+  { key: "interviewing", label: "Interviewing" },
+  { key: "negotiating", label: "Negotiating" },
 ];
 
-const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handleOpenJob }) => {
+const HideJobsPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, handleOpenJob }) => {
   const [jobTitle, setJobTitle] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [jobLocation, setJobLocation] = useState("");
@@ -22,7 +22,7 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    // ⬇️ UPDATED: Use clean URL for custom jobs
+    // ⬇️ Use clean URL for custom jobs
     const cleanUrl = window.location.origin + window.location.pathname;
     setIsJobSaved(false);
     setStatus("bookmarked");
@@ -39,7 +39,7 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
           setIsJobSaved(true);
           setTrackedJobId(jobData.tracked_job_id);
 
-          // ⬇️ Load only title and company for custom jobs
+          // Load only title and company for custom jobs
           if (jobData.job_title) setJobTitle(jobData.job_title);
           if (jobData.company_name) setCompanyName(jobData.company_name);
         }
@@ -48,7 +48,7 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
   }, []);
 
   return {
-    title: "Стильпон",
+    title: "HideJobs",
     content: (
       <>
         {/* Show saved job info or full form */}
@@ -56,7 +56,7 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
           <>
             {/* Show only job title and company when saved */}
             {jobTitle && (
-              <p className="text-2xl font-semibold text-stilpon-700 mb-0">{jobTitle}</p>
+              <p className="text-2xl font-semibold text-hidejobs-700 mb-0">{jobTitle}</p>
             )}
             {companyName && (
               <p className="text-base text-gray-600 mb-6">{companyName}</p>
@@ -64,61 +64,61 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
 
             <div className="flex justify-center">
               <Button onClick={handleOpenJob} type="primary" size="large">
-                Перейти к вакансии
+                Open saved job
               </Button>
             </div>
           </>
         ) : (
           <>
-            {/* Название вакансии */}
+            {/* Job title */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Название вакансии</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Job title</label>
               <Input
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
-                placeholder="Введите название вакансии"
+                placeholder="Enter job title"
                 className="text-sm"
               />
             </div>
 
-            {/* Компания */}
+            {/* Company */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Компания</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Company</label>
               <Input
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Введите название компании"
+                placeholder="Enter company name"
                 className="text-sm"
               />
             </div>
 
-            {/* Локация */}
+            {/* Location */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Локация</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Location</label>
               <Input
                 value={jobLocation}
                 onChange={(e) => setJobLocation(e.target.value)}
-                placeholder="Введите локацию"
+                placeholder="Enter job location"
                 className="text-sm"
               />
             </div>
 
-            {/* Описание вакансии */}
+            {/* Job description */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Описание вакансии</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Job description</label>
               <TextArea
                 rows={4}
                 style={{ resize: "none" }}
                 className="text-sm"
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="Введите описание вакансии"
+                placeholder="Enter job description"
               />
             </div>
 
-            {/* Статус */}
+            {/* Status */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Статус</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Status</label>
               <Select value={status} style={{ width: "100%" }} onChange={setStatus} className="text-sm">
                 {jobStatuses.map((s) => (
                   <Option key={s.key} value={s.key}>
@@ -128,22 +128,22 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
               </Select>
             </div>
 
-            {/* Интерес */}
+            {/* Interest */}
             <div className="mb-3">
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Интерес</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Interest</label>
               <Rate value={rating} onChange={setRating} />
             </div>
 
-            {/* Заметки */}
+            {/* Notes */}
             <div>
-              <label className="block text-lg font-semibold text-stilpon-700 mb-1">Заметки</label>
+              <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Notes</label>
               <TextArea
                 rows={4}
                 style={{ resize: "none" }}
                 className="text-sm"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Добавьте заметки"
+                placeholder="Add notes"
               />
             </div>
           </>
@@ -158,7 +158,7 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
       company_name: companyName,
       job_location: jobLocation,
       job_description: jobDescription,
-      // ⬇️ UPDATED: Use clean URL for custom jobs
+      // ⬇️ Use clean URL for custom jobs
       externalJobId: window.location.origin + window.location.pathname,
       job_url: window.location.href,
     },
@@ -166,4 +166,4 @@ const StilponPanelCustomJob = ({ isJobSaved, setIsJobSaved, setTrackedJobId, han
   };
 };
 
-export default StilponPanelCustomJob;
+export default HideJobsPanelCustomJob;

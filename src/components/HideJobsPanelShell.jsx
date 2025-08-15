@@ -9,14 +9,14 @@ import {
   ArrowsAltOutlined,
 } from "@ant-design/icons";
 
-import Logo from "../assets/Logo";
+import LogoNoBackground from "../assets/LogoNoBackground";
 
-import StilponPanelContent from "./StilponPanelContent";
-import StilponPanelCustomJob from "./StilponPanelCustomJob";
-import StilponPanelSave from "./StilponPanelSave";
-import StilponPanelLoginRequired from "./StilponPanelLoginRequired";
+import HideJobsPanelContent from "./HideJobsPanelContent";
+import HideJobsPanelCustomJob from "./HideJobsPanelCustomJob";
+import HideJobsPanelSave from "./HideJobsPanelSave";
+import HideJobsPanelLoginRequired from "./HideJobsPanelLoginRequired";
 
-const StilponPanelShell = () => {
+const HideJobsPanelShell = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [isButtonVisible, setIsButtonVisible] = useState(false);
@@ -29,22 +29,40 @@ const StilponPanelShell = () => {
   const buttonRef = useRef(null);
   const dragState = useRef({ drag: false, dragged: false, startY: 0, initTop: 0 });
 
+  // Only show the panel on these job page patterns (whitelist)
+  const SUPPORTED_JOB_PATTERNS = [
+    /\/\/[^/]*?hh\.ru\/vacancy\//i,
+    /\/\/[^/]*?zarplata\.ru\/vacancy\//i,
+    /\/\/(www\.)?linkedin\.com\/jobs\/view\//i, // LinkedIn job pages
+    // add more allowed job-page regexes below as needed
+    // /\/\/(www\.)?indeed\.com\/viewjob\//i,
+    // /\/\/(www\.)?glassdoor\.com\/job-listing\//i,
+  ];
+
+  // Sites we have an automatic scraper for (subset of the whitelist)
+  const SITES_WITH_SCRAPER = [
+    /\/\/[^/]*?hh\.ru\/vacancy\//i,
+    /\/\/[^/]*?zarplata\.ru\/vacancy\//i,
+    /\/\/(www\.)?linkedin\.com\/jobs\/view\//i, // LinkedIn also has scraper support
+  ];
+
+  const href = location.href;
+  const isSupportedJob = SUPPORTED_JOB_PATTERNS.some((rx) => rx.test(href));
+  const hasScraper = SITES_WITH_SCRAPER.some((rx) => rx.test(href));
+
   // Check login status on mount and listen for storage changes
   useEffect(() => {
-    // Initial check
     chrome.storage.local.get("user", (result) => {
-      setIsLoggedIn(!!result.user?.id);
+      setIsLoggedIn(!!result.user?.uid);
     });
 
-    // Listen for changes to the 'user' key
     const handleStorageChange = (changes, namespace) => {
       if (namespace === "local" && "user" in changes) {
-        setIsLoggedIn(!!changes.user.newValue?.id);
+        setIsLoggedIn(!!changes.user.newValue?.uid);
       }
     };
 
     chrome.storage.onChanged.addListener(handleStorageChange);
-
     return () => {
       chrome.storage.onChanged.removeListener(handleStorageChange);
     };
@@ -52,8 +70,8 @@ const StilponPanelShell = () => {
 
   // Panel visibility from storage
   useEffect(() => {
-    chrome?.storage?.local?.get(["stilpon_panel_visible"], (result) => {
-      if (result?.stilpon_panel_visible === true) {
+    chrome?.storage?.local?.get(["hidejobs_panel_visible"], (result) => {
+      if (result?.hidejobs_panel_visible === true) {
         setIsPanelVisible(true);
       }
     });
@@ -100,7 +118,7 @@ const StilponPanelShell = () => {
         return;
       }
       setIsPanelVisible(true);
-      chrome.storage.local.set({ stilpon_panel_visible: true });
+      chrome.storage.local.set({ hidejobs_panel_visible: true });
       setIsButtonVisible(false);
     };
 
@@ -122,14 +140,14 @@ const StilponPanelShell = () => {
     const toggleHandler = () => {
       setIsPanelVisible((prev) => {
         const nowVisible = !prev;
-        chrome.storage.local.set({ stilpon_panel_visible: nowVisible });
+        chrome.storage.local.set({ hidejobs_panel_visible: nowVisible });
         if (nowVisible) setIsButtonVisible(false);
         if (!nowVisible) setIsButtonVisible(true);
         return nowVisible;
       });
     };
-    window.addEventListener("toggle-stilpon-panel", toggleHandler);
-    return () => window.removeEventListener("toggle-stilpon-panel", toggleHandler);
+    window.addEventListener("toggle-hidejobs-panel", toggleHandler);
+    return () => window.removeEventListener("toggle-hidejobs-panel", toggleHandler);
   }, []);
 
   // Show button after delay
@@ -139,18 +157,16 @@ const StilponPanelShell = () => {
     }, 1000);
   }, []);
 
-  // ⬇️ FIXED: detect pages that have no scraper
+  // Detect manual mode ONLY on supported pages
   useEffect(() => {
-    // if URL is NOT hh.ru/vacancy/*  AND NOT zarplata.ru/vacancy/*  → manual mode
-    const noScraper = !/\/\/[^/]*?hh\.ru\/vacancy\//i.test(location.href) &&
-      !/\/\/[^/]*?zarplata\.ru\/vacancy\//i.test(location.href);
-
-    setManualMode(noScraper);
-  }, []);
+    // If page is not whitelisted, we won’t render anything at all (see early return below)
+    // If it IS whitelisted but we don’t have a scraper → manual mode
+    setManualMode(isSupportedJob && !hasScraper);
+  }, [isSupportedJob, hasScraper]);
 
   const handleOpenJob = () => {
     if (trackedJobId) {
-      const url = `https://app.stilpon.ru/job-tracker/${trackedJobId}`;
+      const url = `https://app.hidejobs.com/job-tracker/${trackedJobId}`;
       console.log("🔓 Opening job in app:", url);
       chrome.runtime.sendMessage({ type: "open-tab", url });
     } else {
@@ -158,56 +174,55 @@ const StilponPanelShell = () => {
     }
   };
 
-  // ⬇️ FIXED: Always call both hooks, then choose which data to use
-  const contentHookResult = StilponPanelContent({
+  const contentHookResult = HideJobsPanelContent({
     isJobSaved,
     setIsJobSaved,
     setTrackedJobId,
     handleOpenJob,
   });
 
-  const customJobHookResult = StilponPanelCustomJob({
+  const customJobHookResult = HideJobsPanelCustomJob({
     isJobSaved,
     setIsJobSaved,
     setTrackedJobId,
     handleOpenJob,
   });
 
-  // Choose which result to use based on manualMode
-  const { title, content, status, rating, notes, data, jobStatuses } = manualMode 
-    ? customJobHookResult 
+  const { title, content, status, rating, notes, data, jobStatuses } = manualMode
+    ? customJobHookResult
     : contentHookResult;
 
   const dropdownItems = [
     {
       key: "home",
-      label: "Панель управления",
+      label: "Dashboard",
       icon: <HomeFilled />,
       onClick: () => {
-        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.stilpon.ru/home" });
+        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/home" });
         setDropdownOpen(false);
       },
     },
     {
       key: "resume-builder",
-      label: "Конструктор резюме",
+      label: "Resume Builder",
       icon: <FileDoneOutlined />,
       onClick: () => {
-        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.stilpon.ru/resume-builder" });
+        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/resume-builder" });
         setDropdownOpen(false);
       },
     },
     {
       key: "job-tracker",
-      label: "Трекер вакансий",
+      label: "Job Tracker",
       icon: <DoubleRightOutlined />,
       onClick: () => {
-        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.stilpon.ru/job-tracker" });
+        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/job-tracker" });
         setDropdownOpen(false);
       },
     },
   ];
 
+  if (!isSupportedJob) return null; // Not in whitelist → no button, no panel
   return (
     <>
       <style>
@@ -236,21 +251,19 @@ const StilponPanelShell = () => {
             right: -150px;
           }
           .blue-section {
-            background-color: #ffffff;
-            border: 2px solid #28507c;
+            background-color: #28507c;
             border-right: none;
-            color: white;
             border-radius: 5px 0 0 5px;
             padding: 0 5px;
-            height: 65px;
+            height: 50px;
             display: flex;
             align-items: center;
             justify-content: center;
           }
           .red-section {
-            background-color: #28507c;
+            background-color: #233b57;
             width: 20px;
-            height: 65px;
+            height: 50px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -278,12 +291,12 @@ const StilponPanelShell = () => {
           }`}
       >
         <div className="blue-section cursor-pointer">
-          <Logo className="w-14 h-14" />
+          <LogoNoBackground className="w-10 h-10" />
         </div>
         <div className="red-section cursor-grab">
           <ArrowsAltOutlined style={{ transform: "rotate(-45deg)", fontSize: "18px", color: "white" }} />
         </div>
-        <div className="tooltip">Стильпон</div>
+        <div className="tooltip">HideJobs</div>
       </div>
       <div
         ref={containerRef}
@@ -291,8 +304,8 @@ const StilponPanelShell = () => {
           }`}
       >
         {/* Sticky Header */}
-        <div className="bg-stilpon-50 shrink-0 sticky top-0 z-10 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
-          <div className="text-lg font-bold text-stilpon-700">{title}</div>
+        <div className="bg-hidejobs-50 shrink-0 sticky top-0 z-10 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+          <div className="text-lg font-bold text-hidejobs-700">{title}</div>
           <div className="flex items-center gap-2">
             <Dropdown
               menu={{ items: dropdownItems }}
@@ -318,7 +331,7 @@ const StilponPanelShell = () => {
               onClick={() => {
                 setIsPanelVisible(false);
                 setIsButtonVisible(true);
-                chrome.storage.local.set({ stilpon_panel_visible: false });
+                chrome.storage.local.set({ hidejobs_panel_visible: false });
               }}
               className="hover:bg-gray-200 rounded-full"
             />
@@ -327,13 +340,13 @@ const StilponPanelShell = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 text-sm">
-          {isLoggedIn ? content : <StilponPanelLoginRequired />}
+          {isLoggedIn ? content : <HideJobsPanelLoginRequired />}
         </div>
 
-        {/* Sticky Footer - Only shown when logged in */}
+        {/* Sticky Footer */}
         {isLoggedIn && (
-          <div className="shrink-0 sticky bottom-0 z-10 bg-stilpon-50 border-t border-gray-200 px-4 py-3 flex justify-center items-center">
-            <StilponPanelSave
+          <div className="shrink-0 sticky bottom-0 z-10 bg-hidejobs-50 border-t border-gray-200 px-4 py-3 flex justify-center items-center">
+            <HideJobsPanelSave
               data={data}
               status={status}
               rating={rating}
@@ -350,4 +363,4 @@ const StilponPanelShell = () => {
   );
 };
 
-export default StilponPanelShell;
+export default HideJobsPanelShell;

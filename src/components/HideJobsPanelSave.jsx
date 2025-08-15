@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Button, message } from "antd";
 import { PlusOutlined, CheckOutlined } from "@ant-design/icons";
 
-const StilponPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved, setIsJobSaved, setTrackedJobId }) => {
+const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved, setIsJobSaved, setTrackedJobId }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
@@ -15,7 +15,7 @@ const StilponPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved
     console.log("🔍 Clean URL:", window.location.origin + window.location.pathname);
 
     if (!data || Object.keys(data).length === 0) {
-      message.error("Нет данных о вакансии для сохранения");
+      message.error("No job data available to save");
       console.warn("⛔ jobContent is missing or empty:", data);
       return;
     }
@@ -24,13 +24,13 @@ const StilponPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved
       const user = result.user;
       console.log("🟡 user from chrome.storage.local:", user);
 
-      if (!user?.id) {
-        message.error("Пользователь не найден в chrome.storage.local");
+      if (!user?.uid) {
+        message.error("User not found in chrome.storage.local");
         return;
       }
 
       const payload = {
-        user_id: user.id,
+        user_id: user.uid,
         tracked_job: {
           job_title: data.job_title || "",
           company_name: data.company_name || "",
@@ -67,21 +67,21 @@ const StilponPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved
           (response) => {
             if (chrome.runtime.lastError) {
               console.error("❌ Background error:", chrome.runtime.lastError.message);
-              message.error("Ошибка при сохранении");
+              message.error("Error while saving");
               setLoading(false);
               return;
             }
 
             if (response?.success) {
               console.log("✅ Saved job:", response.data);
-              message.success("Вакансия сохранена");
+              message.success("Job saved");
 
-              // ⬇️ FIXED: Detect custom job correctly
+              // Detect custom job correctly
               const cleanUrl = window.location.origin + window.location.pathname;
               const isCustomJob = !data.externalJobId || data.externalJobId === cleanUrl;
-              
+
               let storageKey, storageData;
-              
+
               if (isCustomJob) {
                 // Custom job: use clean URL and save title/company
                 storageKey = cleanUrl;
@@ -101,7 +101,7 @@ const StilponPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved
                 };
                 console.log("🔵 SAVING SCRAPED JOB:", storageKey, storageData);
               }
-              
+
               if (response.data.tracked_job_id) {
                 chrome.storage.local.get(["saved_jobs"], (storageResult) => {
                   const savedJobs = storageResult.saved_jobs || {};
@@ -119,14 +119,14 @@ const StilponPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved
               }
             } else {
               console.error("❌ Save failed:", response.error);
-              message.error("Ошибка при сохранении");
+              message.error("Error while saving");
               setLoading(false);
             }
           }
         );
       } catch (err) {
         console.error("❌ Save failed:", err);
-        message.error("Ошибка при сохранении");
+        message.error("Error while saving");
         setLoading(false);
       }
     });
@@ -141,9 +141,9 @@ const StilponPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved
       onClick={handleSave}
       disabled={isJobSaved}
     >
-      {loading ? "Сохраняю" : isJobSaved ? "Сохранено" : "Сохранить"}
+      {loading ? "Saving" : isJobSaved ? "Saved" : "Save"}
     </Button>
   );
 };
 
-export default StilponPanelSave;
+export default HideJobsPanelSave;

@@ -90,7 +90,7 @@
   const hasMissingCriticalData = (p) => !p.job_title || !p.company_name;
 
   const sendPayload = (payload) => {
-    window.postMessage({ type: "stilpon-job-data", payload }, "*");
+    window.postMessage({ type: "hidejobs-job-data", payload }, "*");
     console.log("🧠 Sent scraped job data to content-script:", payload);
   };
 

@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-stilpon-50: #f4f7fb;
-  --color-stilpon-100: #e7eef7;
-  --color-stilpon-200: #cadbed;
-  --color-stilpon-300: #9bbdde;
-  --color-stilpon-400: #659bcb;
-  --color-stilpon-500: #3e77ac;
-  --color-stilpon-600: #306399;
-  --color-stilpon-700: #28507c;
-  --color-stilpon-800: #254567;
-  --color-stilpon-900: #233b57;
-  --color-stilpon-950: #17263a;
+  --color-hidejobs-50: #f4f7fb;
+  --color-hidejobs-100: #e7eef7;
+  --color-hidejobs-200: #cadbed;
+  --color-hidejobs-300: #9bbdde;
+  --color-hidejobs-400: #659bcb;
+  --color-hidejobs-500: #3e77ac;
+  --color-hidejobs-600: #306399;
+  --color-hidejobs-700: #28507c;
+  --color-hidejobs-800: #254567;
+  --color-hidejobs-900: #233b57;
+  --color-hidejobs-950: #17263a;
 }
