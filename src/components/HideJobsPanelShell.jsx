@@ -10,6 +10,7 @@ import {
 } from "@ant-design/icons";
 
 import LogoNoBackground from "../assets/LogoNoBackground";
+import Logo from "../assets/Logo";
 
 import HideJobsPanelContent from "./HideJobsPanelContent";
 import HideJobsPanelCustomJob from "./HideJobsPanelCustomJob";
@@ -28,27 +29,6 @@ const HideJobsPanelShell = () => {
   const containerRef = useRef(null);
   const buttonRef = useRef(null);
   const dragState = useRef({ drag: false, dragged: false, startY: 0, initTop: 0 });
-
-  // Only show the panel on these job page patterns (whitelist)
-  const SUPPORTED_JOB_PATTERNS = [
-    /\/\/[^/]*?hh\.ru\/vacancy\//i,
-    /\/\/[^/]*?zarplata\.ru\/vacancy\//i,
-    /\/\/(www\.)?linkedin\.com\/jobs\/view\//i, // LinkedIn job pages
-    // add more allowed job-page regexes below as needed
-    // /\/\/(www\.)?indeed\.com\/viewjob\//i,
-    // /\/\/(www\.)?glassdoor\.com\/job-listing\//i,
-  ];
-
-  // Sites we have an automatic scraper for (subset of the whitelist)
-  const SITES_WITH_SCRAPER = [
-    /\/\/[^/]*?hh\.ru\/vacancy\//i,
-    /\/\/[^/]*?zarplata\.ru\/vacancy\//i,
-    /\/\/(www\.)?linkedin\.com\/jobs\/view\//i, // LinkedIn also has scraper support
-  ];
-
-  const href = location.href;
-  const isSupportedJob = SUPPORTED_JOB_PATTERNS.some((rx) => rx.test(href));
-  const hasScraper = SITES_WITH_SCRAPER.some((rx) => rx.test(href));
 
   // Check login status on mount and listen for storage changes
   useEffect(() => {
@@ -157,12 +137,15 @@ const HideJobsPanelShell = () => {
     }, 1000);
   }, []);
 
-  // Detect manual mode ONLY on supported pages
+  // Detect manual mode
   useEffect(() => {
-    // If page is not whitelisted, we won’t render anything at all (see early return below)
-    // If it IS whitelisted but we don’t have a scraper → manual mode
-    setManualMode(isSupportedJob && !hasScraper);
-  }, [isSupportedJob, hasScraper]);
+    const noScraper =
+      !/\/\/[^/]*?hh\.ru\/vacancy\//i.test(location.href) &&
+      !/\/\/[^/]*?zarplata\.ru\/vacancy\//i.test(location.href) &&
+      !/\/\/(www\.)?linkedin\.com\/jobs\/(view|collections|search)\//i.test(location.href);
+
+    setManualMode(noScraper);
+  }, []);
 
   const handleOpenJob = () => {
     if (trackedJobId) {
@@ -222,7 +205,6 @@ const HideJobsPanelShell = () => {
     },
   ];
 
-  if (!isSupportedJob) return null; // Not in whitelist → no button, no panel
   return (
     <>
       <style>
@@ -305,7 +287,10 @@ const HideJobsPanelShell = () => {
       >
         {/* Sticky Header */}
         <div className="bg-hidejobs-50 shrink-0 sticky top-0 z-10 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
-          <div className="text-lg font-bold text-hidejobs-700">{title}</div>
+          <div className="flex items-center gap-2">
+            <Logo className="w-6 h-6" />
+            <span className="text-lg font-bold text-hidejobs-700">{title}</span>
+          </div>
           <div className="flex items-center gap-2">
             <Dropdown
               menu={{ items: dropdownItems }}

@@ -71,22 +71,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
    4) Internal messages (save tracked job via backend)
    ========================================================================= */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === "save-tracked-job") {
-    fetch("https://functions.yandexcloud.net/d4evluk2gak5k33m28e8", {
+  if (message?.type === "save-tracked-job" && message?.payload) {
+    fetch("https://appsavetrackedjob-2j2kwatdfq-uc.a.run.app", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(message.payload),
     })
-      .then((res) => res.json())
-      .then((data) => {
-        sendResponse({ success: true, data });
+      .then(async (res) => {
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = payload?.error || `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+        sendResponse({ success: true, data: payload });
       })
       .catch((err) => {
         console.error("❌ Background fetch failed:", err);
         sendResponse({ success: false, error: err?.message || String(err) });
       });
 
-    // keep response channel open for async fetch
     return true;
   }
 });

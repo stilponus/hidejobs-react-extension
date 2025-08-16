@@ -106,14 +106,28 @@
     return found || null;
   };
 
-  const getWorkFormat = () =>
-    findFitLevelText((t) => /\b(remote|hybrid|on-?site)\b/i.test(t), "work format");
+  const getWorkFormat = () => {
+    const t = findFitLevelText((txt) => /\b(remote|hybrid|on-?site)\b/i.test(txt), "work format");
+    if (!t) return null;
+    if (/remote/i.test(t)) return "Remote";
+    if (/hybrid/i.test(t)) return "Hybrid";
+    if (/on-?\s?site/i.test(t)) return "On-site";
+    return null;
+  };
 
-  const getEmploymentType = () =>
-    findFitLevelText(
-      (t) => /\b(full[-\s]?time|part[-\s]?time|contract|internship|temporary)\b/i.test(t),
+  const getEmploymentType = () => {
+    const t = findFitLevelText(
+      (txt) => /\b(full[-\s]?time|part[-\s]?time|contract|internship|temporary)\b/i.test(txt),
       "employment type"
     );
+    if (!t) return null;
+    if (/full[-\s]?time/i.test(t)) return "Full-time";
+    if (/part[-\s]?time/i.test(t)) return "Part-time";
+    if (/contract/i.test(t)) return "Contract";
+    if (/internship/i.test(t)) return "Internship";
+    if (/temporary/i.test(t)) return "Temporary";
+    return null;
+  };
 
   const getSalaryText = () =>
     normalizeSpace(
@@ -126,16 +140,26 @@
     return el ? el.innerHTML : null;
   };
 
+  // --- LinkedIn ID extraction ---
+  // Works on both:
+  //   1) /jobs/view/4273773977/
+  //   2) /jobs/collections/.../?currentJobId=4273773977
   const getExternalJobId = () => {
-    const m = window.location.pathname.match(/\/jobs\/view\/(\d+)/);
+    const u = new URL(window.location.href);
+    const fromQuery = u.searchParams.get("currentJobId");
+    if (fromQuery) return fromQuery;
+    const m = u.pathname.match(/\/jobs\/view\/(\d+)/);
     return m ? m[1] : null;
   };
 
-  const getJobURL = () => {
-    const url = new URL(window.location.href);
-    return `${url.origin}${url.pathname}`;
+  // --- Canonical LinkedIn job URL (no trailing slash), e.g.:
+  // https://www.linkedin.com/jobs/view/4273773977
+  const getCanonicalLinkedInUrl = () => {
+    const id = getExternalJobId();
+    return id ? `https://www.linkedin.com/jobs/view/${id}` : window.location.href;
   };
 
+  // Keep for completeness (we store canonical instead)
   const hasEasyApply = () => {
     const btn = getEl("#jobs-apply-button-id");
     const present = !!(btn && /easy apply/i.test(btn.innerText || ""));
@@ -171,7 +195,10 @@
     add("comp_currency", comp_currency);
     add("job_description", job_description);
     add("externalJobId", externalJobId);
-    add("job_url", getJobURL());
+
+    // 🔒 Always save LinkedIn URL in canonical form (no trailing slash)
+    add("job_url", getCanonicalLinkedInUrl());
+
     add("platform", "LinkedIn");
     add("easy_apply", hasEasyApply());
     add("employment_type", employment_type);
