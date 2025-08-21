@@ -105,7 +105,7 @@ export default function FilterBadge({ storageKey, label, onColor, compact = fals
     // Inside we right-justify the chip so when it widens, the pill grows LEFT.
     const outerStyle = {
       height: 32,
-      borderRadius: "25px 0px 0px 25px",
+      borderRadius: "8px 0px 0px 8px",
       background: isOn ? resolvedOnColor : DISABLED_BG,
       opacity: isOn ? 1 : OFF_OPACITY,
       display: "inline-flex",
@@ -139,6 +139,7 @@ export default function FilterBadge({ storageKey, label, onColor, compact = fals
   const baseBtnStyle = {
     display: "inline-flex",
     alignItems: "center",
+    borderRadius: 8,
     gap: 6,
     fontWeight: 600,
     padding: "0px 12px 0px 8px",

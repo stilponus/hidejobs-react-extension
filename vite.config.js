@@ -42,6 +42,7 @@ export default defineConfig({
         "content-applied": path.resolve(__dirname, "src/content-scripts/content-applied.js"),
         "content-viewed": path.resolve(__dirname, "src/content-scripts/content-viewed.js"),
         "content-keywords": path.resolve(__dirname, "src/content-scripts/content-keywords.js"),
+        "content-hours-patch": path.resolve(__dirname, "src/content-scripts/content-hours-patch.js"),
 
         
       },

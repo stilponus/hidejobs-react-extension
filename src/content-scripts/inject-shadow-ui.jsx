@@ -1,9 +1,10 @@
 // src/entry/inject-shadow-ui.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import HideJobsPanelShell from "../components/HideJobsPanelShell";
 import BadgesHost from "../components/BadgesHost";
 import KeywordFilterPanel from "../components/KeywordFilterPanel";
+import FilterByHoursPanel from "../components/FilterByHoursPanel.jsx";
 import { StyleProvider } from "antd-style";
 import { ConfigProvider } from "antd";
 import tailwindCss from "../index.css?inline";
@@ -48,35 +49,52 @@ function isJobPage(href = location.href) {
   shadowRoot.appendChild(style);
 
   const container = document.createElement("div");
-  // This container holds the whole UI (panel + badges + keywords)
-  // Set a BASE z-index; inner components can set their own (badges 9995, panel >9995)
+  // This container holds the whole UI (panel + badges + floating panels)
   container.style.position = "relative";
   container.style.zIndex = "9990";
   shadowRoot.appendChild(container);
 
   const App = () => {
     const [showKeywords, setShowKeywords] = useState(false);
+    const [showFilterByHours, setShowFilterByHours] = useState(false);
     const [href, setHref] = useState(location.href);
 
-    // Read initial “Keywords” toggle from storage
+    // Read initial toggles from storage (Keywords + Filter by Hours) and subscribe to changes
     useEffect(() => {
-      chrome?.storage?.local?.get(["userTextBadgeVisible", "userText"], (res) => {
-        // Your switches use <key>BadgeVisible; keep supporting both keys
-        const v = typeof res?.userTextBadgeVisible === "boolean"
-          ? !!res.userTextBadgeVisible
-          : !!res?.userText; // fallback if you ever used `userText`
-        setShowKeywords(v);
-      });
+      chrome?.storage?.local?.get(
+        [
+          "userTextBadgeVisible", "userText",                    // keywords (current + legacy)
+          "filterByHoursBadgeVisible", "filterByHours"           // hours (current + legacy)
+        ],
+        (res) => {
+          const kw = typeof res?.userTextBadgeVisible === "boolean"
+            ? !!res.userTextBadgeVisible
+            : !!res?.userText;
+          setShowKeywords(kw);
+
+          const hrs = typeof res?.filterByHoursBadgeVisible === "boolean"
+            ? !!res.filterByHoursBadgeVisible
+            : !!res?.filterByHours;
+          setShowFilterByHours(hrs);
+        }
+      );
 
       const onChange = (changes, area) => {
         if (area !== "local") return;
+
         if ("userTextBadgeVisible" in changes) {
           setShowKeywords(!!changes.userTextBadgeVisible.newValue);
         } else if ("userText" in changes) {
-          // back-compat fallback
           setShowKeywords(!!changes.userText.newValue);
         }
+
+        if ("filterByHoursBadgeVisible" in changes) {
+          setShowFilterByHours(!!changes.filterByHoursBadgeVisible.newValue);
+        } else if ("filterByHours" in changes) {
+          setShowFilterByHours(!!changes.filterByHours.newValue);
+        }
       };
+
       chrome?.storage?.onChanged?.addListener(onChange);
       return () => chrome?.storage?.onChanged?.removeListener(onChange);
     }, []);
@@ -94,6 +112,7 @@ function isJobPage(href = location.href) {
     }, []);
 
     const shouldShowKeywordPanel = isJobPage(href) && showKeywords;
+    const shouldShowHoursPanel = isJobPage(href) && showFilterByHours;
 
     return (
       <StyleProvider container={shadowRoot}>
@@ -132,8 +151,9 @@ function isJobPage(href = location.href) {
           {/* Badge stack (top-right etc.) */}
           <BadgesHost />
 
-          {/* ✅ Keywords panel lives in the SAME shadow root as badges, only on job pages when toggle is ON */}
+          {/* Floating panels (same shadow root as badges) */}
           <KeywordFilterPanel visible={shouldShowKeywordPanel} />
+          <FilterByHoursPanel visible={shouldShowHoursPanel} />
         </ConfigProvider>
       </StyleProvider>
     );
@@ -142,12 +162,12 @@ function isJobPage(href = location.href) {
   const root = createRoot(container);
   root.render(<App />);
 
-  // Toggle panel from background
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === "toggle-panel") {
+  // Toggle main side panel from background
+  chrome?.runtime?.onMessage?.addListener((message, sender, sendResponse) => {
+    if (message?.type === "toggle-panel") {
       const event = new CustomEvent("toggle-hidejobs-panel");
       window.dispatchEvent(event);
-      sendResponse({ received: true });
+      sendResponse?.({ received: true });
       return true;
     }
   });

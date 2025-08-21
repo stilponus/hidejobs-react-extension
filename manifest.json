@@ -77,7 +77,8 @@
         "content-promoted.js",
         "content-applied.js",
         "content-viewed.js",
-        "content-keywords.js" 
+        "content-keywords.js",
+        "content-hours-patch.js"
       ],
       "run_at": "document_idle"
     }

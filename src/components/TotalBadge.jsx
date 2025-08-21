@@ -98,7 +98,7 @@ export default function TotalBadge({ compact = false }) {
   if (compact) {
     const outerStyle = {
       height: 32,
-      borderRadius: "0px 25px 25px 0px",
+      borderRadius: "0px 8px 8px 0px",
       background: ENABLED_BG,
       display: "inline-flex",
       alignItems: "center",
@@ -123,7 +123,7 @@ export default function TotalBadge({ compact = false }) {
   const baseBtnStyle = {
     display: "inline-flex",
     alignItems: "center",
-    borderRadius: 25,
+    borderRadius: 8,
     gap: 6,
     fontWeight: 600,
     padding: "0px 12px 0px 8px",

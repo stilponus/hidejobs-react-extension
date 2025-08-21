@@ -41,6 +41,7 @@ export default function KeywordFilterPanel({ visible }) {
   const chromeApi = useMemo(getChrome, []);
   const [keywords, setKeywords] = useState([]);
   const [input, setInput] = useState("");
+  const [collapsed, setCollapsed] = useState(false);
 
   // Hidden jobs (by keywords) counter - synced with content script
   const [hiddenCount, setHiddenCount] = useState(0);
@@ -55,7 +56,7 @@ export default function KeywordFilterPanel({ visible }) {
   useEffect(() => {
     if (!chromeApi) return;
     chromeApi.storage?.local?.get(
-      ["filterKeywords", "keywordPanelPos", "keywordHiddenCount"],
+      ["filterKeywords", "keywordPanelPos", "keywordHiddenCount", "keywordPanelCollapsed"],
       (res) => {
         const keywords = Array.isArray(res?.filterKeywords) ? res.filterKeywords : [];
         setKeywords(keywords);
@@ -67,6 +68,9 @@ export default function KeywordFilterPanel({ visible }) {
           const count = typeof res?.keywordHiddenCount === 'number' ? res.keywordHiddenCount : 0;
           setHiddenCount(count);
         }
+
+        // Restore collapsed state
+        setCollapsed(!!res?.keywordPanelCollapsed);
 
         // restore saved position
         const saved = res?.keywordPanelPos;
@@ -80,7 +84,7 @@ export default function KeywordFilterPanel({ visible }) {
   // Listen for count updates from content script
   useEffect(() => {
     if (!chromeApi?.storage?.onChanged) return;
-    
+
     const handler = (changes, area) => {
       if (area !== "local") return;
 
@@ -102,7 +106,7 @@ export default function KeywordFilterPanel({ visible }) {
         }
       }
     };
-    
+
     chromeApi.storage.onChanged.addListener(handler);
     return () => chromeApi.storage.onChanged.removeListener(handler);
   }, [chromeApi]);
@@ -116,11 +120,11 @@ export default function KeywordFilterPanel({ visible }) {
   const addKeyword = () => {
     const k = (input || "").trim();
     if (!k) return;
-    
+
     const next = Array.from(new Set([...keywords, k])).sort((a, b) => a.localeCompare(b));
     persistKeywords(next);
     setInput("");
-    
+
     // Enable keyword filtering
     chromeApi?.storage?.local?.set({ userTextHidden: true });
   };
@@ -128,7 +132,7 @@ export default function KeywordFilterPanel({ visible }) {
   const removeKeyword = (k) => {
     const next = keywords.filter((x) => x !== k);
     persistKeywords(next);
-    
+
     // Keep filtering enabled even after removing a keyword
     chromeApi?.storage?.local?.set({ userTextHidden: true });
   };
@@ -137,14 +141,22 @@ export default function KeywordFilterPanel({ visible }) {
   const onMouseDown = (e) => {
     if (e.button !== 0) return; // left click only
     const target = e.target;
+
+    // Ignore interactions on focusable controls (don’t start drag, don’t blur)
     if (target.closest("input, textarea, button, .ant-input, .ant-btn, .ant-tag-close-icon")) return;
+
+    // ✅ Ensure any focused control (like the Input) loses focus so its outline disappears
+    if (document.activeElement && typeof document.activeElement.blur === "function") {
+      document.activeElement.blur();
+    }
 
     const box = wrapperRef.current?.getBoundingClientRect();
     if (!box) return;
 
     setDragging(true);
     dragOffsetRef.current = { x: e.clientX - box.left, y: e.clientY - box.top };
-    e.preventDefault();
+
+    // ❌ Do NOT call e.preventDefault() here — it blocks blur.
   };
 
   const onMouseMove = (e) => {
@@ -164,6 +176,13 @@ export default function KeywordFilterPanel({ visible }) {
     if (!dragging) return;
     setDragging(false);
     chromeApi?.storage?.local?.set({ keywordPanelPos: pos });
+  };
+
+  const handleHeaderDoubleClick = (e) => {
+    e.stopPropagation(); // Don't trigger drag
+    const newCollapsed = !collapsed;
+    setCollapsed(newCollapsed);
+    chromeApi?.storage?.local?.set({ keywordPanelCollapsed: newCollapsed });
   };
 
   useEffect(() => {
@@ -219,75 +238,87 @@ export default function KeywordFilterPanel({ visible }) {
           cursor: "default",
           border: "none",
         }}
-        headStyle={{ 
-          fontWeight: 700, 
-          userSelect: "none", 
-          fontSize: 16,
-          backgroundColor: "#28507c",
-          color: "white"
+        styles={{
+          header: {
+            fontWeight: 700,
+            userSelect: "none",
+            fontSize: 16,
+            backgroundColor: "#28507c",
+            color: "white",
+            borderBottom: "none",
+            borderRadius: collapsed ? 8 : "8px 8px 0 0", // ✅ full radius if collapsed
+          },
+          body: collapsed ? { display: "none", padding: 0 } : { padding: 12 },
         }}
-        title="Hide Jobs by Keywords"
+        title={
+          <div onDoubleClick={handleHeaderDoubleClick}>
+            Hide Jobs by Keywords
+          </div>
+        }
         extra={
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {hasKeywords ? (
               <Tooltip title="Clear all keywords">
-                <Button 
-                  type="text" 
-                  size="small" 
-                  icon={<DeleteOutlined style={{ color: "white" }} />} 
-                  onClick={showConfirmClear} 
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DeleteOutlined style={{ color: "white" }} />}
+                  onClick={showConfirmClear}
                 />
               </Tooltip>
             ) : null}
-            {/* 🔢 Count of jobs hidden by keywords — managed by content script */}
             <CountBadge count={hiddenCount} />
           </div>
         }
       >
-        <Input
-          allowClear
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onPressEnter={addKeyword}
-          placeholder="Type keyword and press Enter"
-          prefix={<EyeInvisibleOutlined style={{ color: "#5f6163" }} />}
-          style={{ marginBottom: 8 }}
-          onMouseDown={(e) => e.stopPropagation()} // prevent starting drag from input
-        />
+        {!collapsed && (
+          <>
+            <Input
+              allowClear
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onPressEnter={addKeyword}
+              placeholder="Type keyword and press Enter"
+              prefix={<EyeInvisibleOutlined style={{ color: "#5f6163" }} />}
+              style={{ marginBottom: 8 }}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
 
-        {keywords.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="No keywords yet"
-            style={{ margin: "12px 0" }}
-          />
-        ) : (
-          <div 
-            style={{ 
-              display: "flex", 
-              flexWrap: "wrap", 
-              gap: 8, 
-              maxHeight: 202,
-              overflowY: "auto"
-            }}
-          >
-            {keywords.map((k) => (
-              <Tag
-                key={k}
-                closable
-                bordered={false}
-                color="#28507c" // your blue
-                onClose={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  removeKeyword(k);
+            {keywords.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="No keywords yet"
+                style={{ margin: "12px 0" }}
+              />
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  maxHeight: 202,
+                  overflowY: "auto",
                 }}
-                onMouseDown={(e) => e.stopPropagation()}
               >
-                {k.length > 32 ? k.slice(0, 32) + "…" : k}
-              </Tag>
-            ))}
-          </div>
+                {keywords.map((k) => (
+                  <Tag
+                    key={k}
+                    closable
+                    bordered={false}
+                    color="#28507c"
+                    onClose={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      removeKeyword(k);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {k.length > 32 ? k.slice(0, 32) + "…" : k}
+                  </Tag>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </Card>
     </div>
@@ -308,6 +339,3 @@ function clampToViewport(pos, el, widthFallback = 320, heightFallback = 10) {
 
   return { top, left };
 }
-
-
-///////////////

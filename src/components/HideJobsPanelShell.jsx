@@ -198,7 +198,7 @@ const HideJobsPanelShell = () => {
   const dropdownItems = [
     {
       key: "job-panel",
-      label: "Job Panel",
+      label: "Add to Tracker",
       icon: <PlusSquareOutlined />,
       onClick: () => {
         setPanelView("default");
@@ -292,7 +292,7 @@ const HideJobsPanelShell = () => {
           .blue-section {
             background-color: #28507c;
             border-right: none;
-            border-radius: 5px 0 0 5px;
+            border-radius: 8px 0 0 8px;
             padding: 0 5px;
             height: 50px;
             display: flex;
@@ -314,7 +314,7 @@ const HideJobsPanelShell = () => {
             transform: translateX(-50%);
             background-color: #233b57;
             color: white;
-            font-size: 14px;
+            font-size: 12px;
             padding: 4px 8px;
             border-radius: 5px;
             white-space: nowrap;

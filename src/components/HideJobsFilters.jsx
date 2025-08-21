@@ -1,11 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Switch, Typography, Tooltip } from "antd";
-import {
-  InfoCircleOutlined,
-  CrownFilled,
-  EyeInvisibleFilled,
-  ClockCircleFilled,
-} from "@ant-design/icons";
+import { InfoCircleOutlined, CrownFilled } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -29,14 +24,14 @@ const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map(k => [k, false]));
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch { }
+  } catch {}
   return null;
 }
 
 export default function HideJobsFilters() {
   const chromeApi = useMemo(getChrome, []);
   const [values, setValues] = useState(DEFAULT_STATE);
-  const [compact, setCompact] = useState(false); // <<— NEW (Compact badges)
+  const [compact, setCompact] = useState(false); // Compact badges
 
   // Initial load: read per-flag visibility + legacy dismissed key
   useEffect(() => {
@@ -45,7 +40,7 @@ export default function HideJobsFilters() {
     const visibilityKeys = FILTER_KEYS.map((k) => `${k}BadgeVisible`);
 
     chromeApi.storage.local.get(
-      [...visibilityKeys, "dismissedBadgeVisible", "badgesCompact"], // include compact
+      [...visibilityKeys, "dismissedBadgeVisible", "badgesCompact"],
       (res) => {
         const next = { ...DEFAULT_STATE };
 
@@ -61,7 +56,7 @@ export default function HideJobsFilters() {
         }
 
         setValues(next);
-        setCompact(!!res?.badgesCompact); // set compact from storage
+        setCompact(!!res?.badgesCompact);
       }
     );
 
@@ -118,7 +113,7 @@ export default function HideJobsFilters() {
       const detail = { ...values, [key]: checked };
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
       window.dispatchEvent(evt);
-    } catch { }
+    } catch {}
   };
 
   // Toggling compact mode
@@ -127,36 +122,82 @@ export default function HideJobsFilters() {
     chromeApi?.storage?.local?.set?.({ badgesCompact: checked });
   };
 
+  // Rows (unchanged)
   const rows = [
     { key: "dismissed", label: "Dismissed" },
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
-    { key: "repostedGhost", label: "Reposted / Ghost Jobs", premium: true, icon: <EyeInvisibleFilled /> },
+    { key: "repostedGhost", label: "Reposted / Ghost Jobs", premium: true },
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true, help: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true, help: true },
     { key: "applied", label: "Applied (LinkedIn)", premium: true },
-    { key: "filterByHours", label: "Filter by Hours", premium: true, icon: <ClockCircleFilled /> },
+    { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "userText", label: "Keywords", premium: true, help: true },
-    { key: "companies", label: "Companies", premium: true, icon: <EyeInvisibleFilled /> },
+    { key: "companies", label: "Companies", premium: true },
   ];
+
+  // Compute the first premium index once (for the section split)
+  const firstPremiumIndex = rows.findIndex(r => r.premium === true);
+  const hasPremium = firstPremiumIndex !== -1;
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
 
-      <div className="rounded-lg border border-gray-200">
+      <div className="">
+        {/* Section: Free filters */}
+        <div className="px-3 py-2 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+          Free filters
+        </div>
+
         {rows.map((row, idx) => {
-          const isLast = idx === rows.length - 1;
+          // Insert "Premium filters" header right before the first premium row
+          if (hasPremium && idx === firstPremiumIndex) {
+            return (
+              <React.Fragment key={`section-premium`}>
+                {/* Premium header */}
+                <div className="px-3 py-2 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                  Premium filters
+                </div>
+
+                {/* Then render the premium row itself */}
+                <div
+                  key={row.key}
+                  className={`flex items-center justify-between px-3 py-2 ${
+                    idx === rows.length - 1 ? "" : "border-b border-gray-100"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
+                    <Text className="truncate">{row.label}</Text>
+                    {row.help ? (
+                      <Tooltip title="Info">
+                        <InfoCircleOutlined className="text-gray-400" />
+                      </Tooltip>
+                    ) : null}
+                  </div>
+
+                  <Switch
+                    size="small"
+                    checked={!!values[row.key]}
+                    onChange={(checked) => updateValue(row.key, checked)}
+                  />
+                </div>
+              </React.Fragment>
+            );
+          }
+
+          // Normal row render (free or premium after header already injected)
           return (
             <div
               key={row.key}
-              className={`flex items-center justify-between px-3 py-2 ${isLast ? "" : "border-b border-gray-100"}`}
+              className={`flex items-center justify-between px-3 py-2 ${
+                idx === rows.length - 1 ? "" : "border-b border-gray-100"
+              }`}
             >
               <div className="flex items-center gap-2 min-w-0">
                 {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
                 <Text className="truncate">{row.label}</Text>
-                {row.icon ? <span className="text-hidejobs-700">{row.icon}</span> : null}
                 {row.help ? (
                   <Tooltip title="Info">
                     <InfoCircleOutlined className="text-gray-400" />
@@ -173,16 +214,15 @@ export default function HideJobsFilters() {
           );
         })}
 
-        {/* NEW: Compact toggle row */}
+        {/* Section: Settings */}
+        <div className="px-3 py-2 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+          Settings
+        </div>
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2 min-w-0">
             <Text className="truncate">Compact</Text>
           </div>
-          <Switch
-            size="small"
-            checked={!!compact}
-            onChange={updateCompact}
-          />
+          <Switch size="small" checked={!!compact} onChange={updateCompact} />
         </div>
       </div>
     </div>
