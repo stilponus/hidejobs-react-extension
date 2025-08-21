@@ -1,8 +1,8 @@
 // ------------------------------
-// Dismissed filter logic (counts + DOM). Badge is React component in shadow UI.
+// Applied filter logic (counts + DOM). Badge is React component in shadow UI.
 // ------------------------------
 (() => {
-  console.log("[HideJobs] dismissed logic loaded:", location.href);
+  console.log("[HideJobs] applied logic loaded:", location.href);
 
   let hiddenCount = 0;
   let countedIds = new Set();
@@ -13,20 +13,25 @@
     location.href.startsWith("https://www.linkedin.com/jobs/search") ||
     location.href.startsWith("https://www.linkedin.com/jobs/collections");
 
+  // Hide all "Applied" jobs and update counters
   function hideJobs() {
     if (!isJobPage()) return;
-    const nodes = document.querySelectorAll(
-      ".job-card-list--is-dismissed, .job-card-job-posting-card-wrapper--dismissed"
-    );
+
+    const nodes = document.querySelectorAll("[data-job-id], [data-occludable-job-id]");
+
     nodes.forEach((job) => {
-      if (job.style.display !== "none") {
+      // English-only, simple text check
+      if (job.style.display !== "none" && job.innerText.includes("Applied")) {
         job.style.display = "none";
-        job.dataset.hiddenBy = "dismissed";
+        job.dataset.hiddenBy = "applied";
+
         const li = job.closest("li");
         if (li) {
           li.style.display = "none";
-          li.dataset.hiddenBy = "dismissed";
+          li.dataset.hiddenBy = "applied";
         }
+
+        // Count unique jobs by id (fallback to text)
         let id = job.getAttribute("data-job-id") || job.getAttribute("data-occludable-job-id");
         if (!id) id = job.innerText.trim();
         if (!countedIds.has(id)) {
@@ -35,38 +40,55 @@
         }
       }
     });
+
     isOn = true;
-    chrome?.storage?.local?.set({ dismissedHiddenCount: hiddenCount, hiddenDismissedCount: hiddenCount }); // keep both just in case
+
+    // Keep both keys for compatibility with any older code
+    chrome?.storage?.local?.set({
+      appliedHiddenCount: hiddenCount,
+      hiddenAppliedCount: hiddenCount,
+    });
+
+    window.hideJobsUtils?.applyOverlaysFromLocalStorage?.(); // optional parity
     if (window.hideJobsUI?.checkHideButtons) window.hideJobsUI.checkHideButtons();
   }
 
+  // Show previously hidden "Applied" jobs and reset counters
   function showJobs() {
     if (!isOn) return;
-    const nodes = document.querySelectorAll(
-      ".job-card-list--is-dismissed, .job-card-job-posting-card-wrapper--dismissed"
-    );
+
+    const nodes = document.querySelectorAll("[data-job-id], [data-occludable-job-id]");
     nodes.forEach((job) => {
-      job.style.display = "";
-      const li = job.closest("li");
-      if (li) li.style.display = "";
-      job.removeAttribute("data-hidden-by");
-      if (li) li.removeAttribute("data-hidden-by");
+      if (job.innerText.includes("Applied")) {
+        job.style.display = "";
+        const li = job.closest("li");
+        if (li) li.style.display = "";
+        job.removeAttribute("data-hidden-by");
+        if (li) li.removeAttribute("data-hidden-by");
+      }
     });
+
     hiddenCount = 0;
     countedIds.clear();
     isOn = false;
-    chrome?.storage?.local?.set({ dismissedHiddenCount: 0, hiddenDismissedCount: 0 });
-    window.hideJobsUtils?.applyOverlaysFromLocalStorage?.();
+
+    chrome?.storage?.local?.set({
+      appliedHiddenCount: 0,
+      hiddenAppliedCount: 0,
+    });
+
+    window.hideJobsUtils?.applyOverlaysFromLocalStorage?.(); // optional parity
     if (window.hideJobsUI?.checkHideButtons) window.hideJobsUI.checkHideButtons();
   }
 
-  // init from storage
+  // --- Init from storage (mirrors "dismissed" and "promoted") ---
   chrome?.storage?.local?.get(
-    ["dismissedHidden", "dismissedHiddenCount", "hiddenDismissedCount"],
+    ["appliedHidden", "appliedHiddenCount", "hiddenAppliedCount"],
     (res) => {
-      const count = Number(res?.dismissedHiddenCount ?? res?.hiddenDismissedCount ?? 0);
+      const count = Number(res?.appliedHiddenCount ?? res?.hiddenAppliedCount ?? 0);
       hiddenCount = count;
-      if (res?.dismissedHidden) {
+
+      if (res?.appliedHidden) {
         isOn = true;
         hideJobs();
         obs.observe(document.body, { childList: true, subtree: true });
@@ -76,11 +98,11 @@
     }
   );
 
-  // react to storage toggles from the React badge
+  // --- React to storage toggles from the React badge ---
   chrome?.storage?.onChanged?.addListener((changes, area) => {
     if (area !== "local") return;
-    if ("dismissedHidden" in changes) {
-      const on = !!changes.dismissedHidden.newValue;
+    if ("appliedHidden" in changes) {
+      const on = !!changes.appliedHidden.newValue;
       if (on) {
         hideJobs();
         obs.observe(document.body, { childList: true, subtree: true });
@@ -91,16 +113,15 @@
     }
   });
 
-  // watch new nodes
+  // --- Watch for new nodes that match "Applied" and hide them if ON ---
   const obs = new MutationObserver((muts) => {
     let found = false;
     for (const m of muts) {
       m.addedNodes?.forEach((node) => {
         if (
           node?.nodeType === 1 &&
-          node.matches?.(
-            ".job-card-list--is-dismissed, .job-card-job-posting-card-wrapper--dismissed"
-          )
+          node.matches?.("[data-job-id], [data-occludable-job-id]") &&
+          node.innerText?.includes?.("Applied")
         ) {
           found = true;
         }
@@ -109,7 +130,7 @@
     if (isOn && found) hideJobs();
   });
 
-  // URL poll re-apply
+  // --- SPA URL polling, same as others ---
   setInterval(() => {
     const u = location.href;
     if (u !== lastUrl) {
@@ -118,11 +139,11 @@
         hiddenCount = 0;
         countedIds.clear();
         isOn = false;
-        chrome?.storage?.local?.set({ dismissedHiddenCount: 0, hiddenDismissedCount: 0 });
+        chrome?.storage?.local?.set({ appliedHiddenCount: 0, hiddenAppliedCount: 0 });
         obs.disconnect();
       } else {
-        chrome?.storage?.local?.get(["dismissedHidden"], (r) => {
-          if (r?.dismissedHidden) {
+        chrome?.storage?.local?.get(["appliedHidden"], (r) => {
+          if (r?.appliedHidden) {
             isOn = true;
             hideJobs();
             obs.observe(document.body, { childList: true, subtree: true });

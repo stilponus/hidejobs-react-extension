@@ -110,11 +110,15 @@ const HideJobsPanelShell = () => {
         dragState.current.dragged = false;
         return;
       }
-      setPanelView("default");
-      chrome?.storage?.local?.set({ hidejobs_panel_view: "default" });
-      setIsPanelVisible(true);
-      chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
-      setIsButtonVisible(false);
+
+      // Restore last view (default -> "default")
+      chrome?.storage?.local?.get(["hidejobs_panel_view"], (res) => {
+        const lastView = res?.hidejobs_panel_view === "filters" ? "filters" : "default";
+        setPanelView(lastView);
+        setIsPanelVisible(true);
+        chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
+        setIsButtonVisible(false);
+      });
     };
 
     button.addEventListener("mousedown", handleMouseDown);

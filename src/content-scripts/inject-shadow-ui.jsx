@@ -1,31 +1,19 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import HideJobsPanelShell from "../components/HideJobsPanelShell";
+import BadgesHost from "../components/BadgesHost";
 import { StyleProvider } from "antd-style";
 import { ConfigProvider } from "antd";
 import tailwindCss from "../index.css?inline";
 
 (function mountHideJobsPanelShadowUI() {
   console.log("🟡 content-script loaded");
+  if (document.querySelector("hidejobs-panel-ui")) return;
 
-  console.log("🟡 DEBUG: I am in the new SHADOW version at", new Date().toLocaleTimeString());
-
-  // If already mounted, skip
-  if (document.querySelector("hidejobs-panel-ui")) {
-    console.log("🟡 already mounted, skipping");
-    return;
-  }
-
-  // 1. Create custom element and inject after </body>
   const host = document.createElement("hidejobs-panel-ui");
   document.body.insertAdjacentElement("afterend", host);
-  console.log("🟡 host element inserted after body");
-
-  // 2. Attach Shadow DOM
   const shadowRoot = host.attachShadow({ mode: "open" });
-  console.log("🟡 shadow root attached");
 
-  // 3. Inject Tailwind styles into shadow root
   const style = document.createElement("style");
   style.textContent = `
   :host, :root {
@@ -46,17 +34,10 @@ import tailwindCss from "../index.css?inline";
     --tw-ring-offset-color: #fff;
     --tw-ring-offset-shadow: 0 0 #0000;
   }
-  ${
-    tailwindCss.replace(/(\d*\.?\d+)rem/g, (_, rem) => {
-      return `${parseFloat(rem) * 16}px`;
-    })
-  }
+  ${tailwindCss.replace(/(\d*\.?\d+)rem/g, (_, rem) => `${parseFloat(rem) * 16}px`)}
 `;
-
   shadowRoot.appendChild(style);
-  console.log("🟡 Tailwind CSS injected");
 
-  // 4. Create a container div with proper positioning
   const container = document.createElement("div");
   container.style.position = "relative";
   container.style.zIndex = "9999";
@@ -70,7 +51,6 @@ import tailwindCss from "../index.css?inline";
         getPopupContainer={() => container}
         theme={{
           token: {
-            // NOTE: Update these to your HideJobs brand colors if needed
             colorPrimary: "#28507c",
             fontFamily: "Inter, sans-serif",
             zIndexPopupBase: 10000,
@@ -81,21 +61,6 @@ import tailwindCss from "../index.css?inline";
               colorPrimaryHover: "#306399",
               colorPrimaryActive: "#233b57",
             },
-            Form: {
-              verticalLabelPadding: "0 0 4px",
-              labelColor: "#6B7280",
-            },
-            Input: {
-              colorBgContainer: "#ffffff",
-              controlHeight: 36,
-            },
-            Spin: {
-              colorPrimary: "#306399",
-            },
-            Select: {
-              optionSelectedBg: "#cadbed",
-              controlItemBgHover: "#e7eef7",
-            },
             Dropdown: {
               colorBgElevated: "#ffffff",
               colorText: "#28507c",
@@ -105,23 +70,27 @@ import tailwindCss from "../index.css?inline";
               fontSize: 14,
               zIndexPopup: 10000,
             },
+            Tag: {
+              borderRadiusSM: 20,
+            },
           },
         }}
       >
+        {/* Your panel stays as-is */}
         <HideJobsPanelShell />
+        {/* Reusable badge stack */}
+        <BadgesHost />
       </ConfigProvider>
     </StyleProvider>
   );
 
-  console.log("🟡 HideJobsPanelShell mounted in Shadow DOM after </body>");
-
-  // Toggle panel when clicking extension icon
+  // Toggle panel from background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "toggle-panel") {
       const event = new CustomEvent("toggle-hidejobs-panel");
       window.dispatchEvent(event);
       sendResponse({ received: true });
-      return true; // ✅ Tells Chrome "I will respond asynchronously"
+      return true;
     }
   });
 })();

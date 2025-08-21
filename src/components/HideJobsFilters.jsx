@@ -1,4 +1,3 @@
-// src/components/HideJobsFilters.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Switch, Typography, Tooltip } from "antd";
 import {
@@ -10,21 +9,22 @@ import {
 
 const { Text } = Typography;
 
-const STORAGE_KEY = "hj_filters_state";
+// ---- Single source of truth: <key>BadgeVisible (and legacy dismissedBadgeVisible) ----
+const FILTER_KEYS = [
+  "dismissed",
+  "promoted",
+  "viewed",
+  "repostedGhost",
+  "indeedSponsored",
+  "glassdoorApplied",
+  "indeedApplied",
+  "applied",
+  "filterByHours",
+  "userText",
+  "companies",
+];
 
-const DEFAULT_STATE = {
-  dismissed: false,
-  promoted: false,
-  viewed: false,
-  repostedGhost: false,
-  indeedSponsored: false,
-  glassdoorApplied: false,
-  indeedApplied: false,
-  applied: false,          // now marked as premium in rows below
-  filterByHours: false,
-  userText: false,
-  companies: false,
-};
+const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map(k => [k, false]));
 
 function getChrome() {
   try {
@@ -34,37 +34,82 @@ function getChrome() {
 }
 
 export default function HideJobsFilters() {
-  const [values, setValues] = useState(DEFAULT_STATE);
   const chromeApi = useMemo(getChrome, []);
+  const [values, setValues] = useState(DEFAULT_STATE);
 
+  // Initial load: read *only* per-flag <key>BadgeVisible (plus legacy dismissedBadgeVisible)
   useEffect(() => {
     if (!chromeApi) return;
-    chromeApi.storage.local.get([STORAGE_KEY], (res) => {
-      const saved = res?.[STORAGE_KEY] || {};
-      setValues((prev) => ({ ...prev, ...saved }));
-    });
 
-    const handleStorage = (changes, areaName) => {
-      if (areaName !== "local") return;
-      if (STORAGE_KEY in changes) {
-        const next = changes[STORAGE_KEY]?.newValue || {};
-        setValues((prev) => ({ ...prev, ...next }));
+    const visibilityKeys = FILTER_KEYS.map((k) => `${k}BadgeVisible`);
+
+    chromeApi.storage.local.get(
+      [...visibilityKeys, "dismissedBadgeVisible"], // legacy
+      (res) => {
+        const next = { ...DEFAULT_STATE };
+
+        FILTER_KEYS.forEach((k) => {
+          if (typeof res?.[`${k}BadgeVisible`] === "boolean") {
+            next[k] = !!res[`${k}BadgeVisible`];
+          }
+        });
+
+        // Back-compat: if present, mirror to dismissed switch
+        if (typeof res?.dismissedBadgeVisible === "boolean") {
+          next.dismissed = !!res.dismissedBadgeVisible;
+        }
+
+        setValues(next);
+      }
+    );
+
+    // Listen for storage changes and update only the touched flags
+    const handleStorage = (changes, area) => {
+      if (area !== "local") return;
+
+      let touched = false;
+      const delta = {};
+
+      FILTER_KEYS.forEach((k) => {
+        const key = `${k}BadgeVisible`;
+        if (key in changes) {
+          delta[k] = !!changes[key].newValue;
+          touched = true;
+        }
+      });
+
+      // legacy key support
+      if ("dismissedBadgeVisible" in changes) {
+        delta.dismissed = !!changes.dismissedBadgeVisible.newValue;
+        touched = true;
+      }
+
+      if (touched) {
+        setValues((prev) => ({ ...prev, ...delta }));
       }
     };
+
     chromeApi.storage.onChanged.addListener(handleStorage);
     return () => chromeApi.storage.onChanged.removeListener(handleStorage);
   }, [chromeApi]);
 
+  // Toggling a switch: write only the single <key>BadgeVisible (and legacy for dismissed)
   const updateValue = (key, checked) => {
-    const next = { ...values, [key]: checked };
-    setValues(next);
+    setValues((prev) => ({ ...prev, [key]: checked }));
 
     if (chromeApi) {
-      chromeApi.storage.local.set({ [STORAGE_KEY]: next });
+      chromeApi.storage.local.set({ [`${key}BadgeVisible`]: checked });
+
+      // legacy mirror for dismissed only
+      if (key === "dismissed") {
+        chromeApi.storage.local.set({ dismissedBadgeVisible: checked });
+      }
     }
 
+    // Notify content scripts (if anyone cares). We send only the new switch state snapshot.
     try {
-      const evt = new CustomEvent("hidejobs-filters-changed", { detail: next });
+      const detail = { ...values, [key]: checked };
+      const evt = new CustomEvent("hidejobs-filters-changed", { detail });
       window.dispatchEvent(evt);
     } catch { }
   };
@@ -96,16 +141,9 @@ export default function HideJobsFilters() {
               className={`flex items-center justify-between px-3 py-2 ${isLast ? "" : "border-b border-gray-100"}`}
             >
               <div className="flex items-center gap-2 min-w-0">
-                {/* Crown BEFORE label (no tooltip) */}
                 {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
-
-                {/* Label */}
                 <Text className="truncate">{row.label}</Text>
-
-                {/* Icons AFTER label (not crown) */}
                 {row.icon ? <span className="text-hidejobs-700">{row.icon}</span> : null}
-
-                {/* Help tooltip (kept) */}
                 {row.help ? (
                   <Tooltip title="Info">
                     <InfoCircleOutlined className="text-gray-400" />

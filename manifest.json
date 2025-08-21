@@ -28,27 +28,55 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "exclude_matches": [
         "https://*.hidejobs.com/*",
         "https://hidejobs.com/*"
       ],
-      "js": ["inject-shadow-ui.js"],
+      "js": [
+        "inject-shadow-ui.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://*.hh.ru/vacancy/*"],
-      "js": ["content-hh.ru-scraper.js"],
+      "matches": [
+        "https://*.hh.ru/vacancy/*"
+      ],
+      "js": [
+        "content-hh.ru-scraper.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://*.linkedin.com/jobs/*"],
-      "js": ["content-linkedin-scraper.js"],
+      "matches": [
+        "https://*.linkedin.com/jobs/*"
+      ],
+      "js": [
+        "content-linkedin-scraper.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://*.zarplata.ru/vacancy/*"],
-      "js": ["content-zarplata.ru-scraper.js"],
+      "matches": [
+        "https://*.zarplata.ru/vacancy/*"
+      ],
+      "js": [
+        "content-zarplata.ru-scraper.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.linkedin.com/jobs/*"
+      ],
+      "js": [
+        "content-dismissed.js",
+        "content-promoted.js",
+        "content-applied.js",
+        "content-viewed.js"
+      ],
       "run_at": "document_idle"
     }
   ]
