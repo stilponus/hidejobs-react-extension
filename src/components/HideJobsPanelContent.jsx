@@ -33,19 +33,36 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
     { key: "negotiating", label: "Negotiating" },
   ];
 
-  /* Receive data from content script */
+  // Receive messages from the scraper
   useEffect(() => {
     const handleMessage = (e) => {
-      if (e.data?.type === "hidejobs-job-data") {
-        console.log("🟡 Job data received:", e.data.payload);
-        setData(e.data.payload);
+      const msg = e.data;
+      if (!msg || typeof msg !== "object") return;
+
+      if (msg.type === "hidejobs-job-loading") {
+        // INSTANT: clear current data so UI shows <Skeleton />
+        setData(null);
+
+        // reset per-job UI state for the next job
+        setIsJobSaved(false);
+        setStatus("bookmarked");
+        setRating(0);
+        setNotes("");
+        setTrackedJobId(null);
+        return;
+      }
+
+      if (msg.type === "hidejobs-job-data" && msg.payload) {
+        console.log("🟡 Job data received:", msg.payload);
+        setData(msg.payload);
       }
     };
+
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [setIsJobSaved, setTrackedJobId]);
 
-  /* Check if job is saved */
+  // Check if this job is already saved (runs when the externalJobId changes)
   useEffect(() => {
     setIsJobSaved(false);
     setStatus("bookmarked");
@@ -57,8 +74,9 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
       chrome.storage.local.get(["saved_jobs"], ({ saved_jobs = {} }) => {
         const jobData = saved_jobs[data.externalJobId];
         if (jobData) {
-          if (typeof jobData === "boolean") setIsJobSaved(jobData);
-          else if (jobData.saved) {
+          if (typeof jobData === "boolean") {
+            setIsJobSaved(jobData);
+          } else if (jobData.saved) {
             setIsJobSaved(true);
             setTrackedJobId(jobData.tracked_job_id);
           }
@@ -105,7 +123,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
 
         <div className="h-px bg-gray-200 w-full mb-4 mt-6" />
 
-        {/* Saved */}
+        {/* Saved / actions */}
         {isJobSaved ? (
           <div className="flex justify-center">
             <Button onClick={handleOpenJob} type="primary" size="large">

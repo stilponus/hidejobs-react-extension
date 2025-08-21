@@ -257,8 +257,8 @@ const HideJobsPanelShell = () => {
             transform: translateX(-50%);
             background-color: #233b57;
             color: white;
-            font-size: 12px;
-            padding: 5px 8px;
+            font-size: 14px;
+            padding: 4px 8px;
             border-radius: 5px;
             white-space: nowrap;
             opacity: 0;

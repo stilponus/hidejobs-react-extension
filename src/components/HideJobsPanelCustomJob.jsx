@@ -6,7 +6,7 @@ const { TextArea } = Input;
 
 const jobStatuses = [
   { key: "bookmarked", label: "Bookmarked" },
-  { key: "applying", label: "Planning to apply" },
+  { key: "applying", label: "Applying" },
   { key: "applied", label: "Applied" },
   { key: "interviewing", label: "Interviewing" },
   { key: "negotiating", label: "Negotiating" },

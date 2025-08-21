@@ -8,6 +8,17 @@
   // === Config ===
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 1000; // ms
+  const URL_CHECK_INTERVAL = 300; // ms fallback for stealth changes
+
+  // === Internal state for run / URL tracking ===
+  const STATE = {
+    lastUrl: window.location.href,
+    runId: 0,               // increments on each new URL so old retries are ignored
+    retryTimeout: null,     // current retry timer
+    readyObserver: null,    // observer waiting for job content
+    urlObserver: null,      // observer watching for URL changes via DOM updates
+    urlInterval: null,      // interval fallback for URL checks
+  };
 
   // === Utils ===
   const getEl = (selector) => document.querySelector(selector);
@@ -141,30 +152,41 @@
   };
 
   // --- LinkedIn ID extraction ---
-  // Works on both:
-  //   1) /jobs/view/4273773977/
-  //   2) /jobs/collections/.../?currentJobId=4273773977
   const getExternalJobId = () => {
-    const u = new URL(window.location.href);
-    const fromQuery = u.searchParams.get("currentJobId");
-    if (fromQuery) return fromQuery;
-    const m = u.pathname.match(/\/jobs\/view\/(\d+)/);
-    return m ? m[1] : null;
+    try {
+      const u = new URL(window.location.href);
+      const fromQuery = u.searchParams.get("currentJobId");
+      if (fromQuery) return fromQuery;
+      const m = u.pathname.match(/\/jobs\/view\/(\d+)/);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
   };
 
-  // --- Canonical LinkedIn job URL (no trailing slash), e.g.:
-  // https://www.linkedin.com/jobs/view/4273773977
+  // --- Canonical LinkedIn job URL (no trailing slash)
   const getCanonicalLinkedInUrl = () => {
     const id = getExternalJobId();
-    return id ? `https://www.linkedin.com/jobs/view/${id}` : window.location.href;
+    return id ? `https://www.linkedin.com/jobs/view/${id}` : window.location.href.replace(/\/+$/, "");
   };
 
-  // Keep for completeness (we store canonical instead)
+  // Easy Apply
   const hasEasyApply = () => {
     const btn = getEl("#jobs-apply-button-id");
     const present = !!(btn && /easy apply/i.test(btn.innerText || ""));
     log("Easy Apply detected:", present);
     return present;
+  };
+
+  // === Messaging ===
+  const sendLoading = () => {
+    window.postMessage({ type: "hidejobs-job-loading" }, "*");
+    if (DEBUG) log("Posted loading message to content-panel.");
+  };
+
+  const sendPayload = (payload) => {
+    window.postMessage({ type: "hidejobs-job-data", payload }, "*");
+    if (DEBUG) log("Posted payload to content-panel:", payload);
   };
 
   // === Build payload (skip null/empty) ===
@@ -195,10 +217,7 @@
     add("comp_currency", comp_currency);
     add("job_description", job_description);
     add("externalJobId", externalJobId);
-
-    // 🔒 Always save LinkedIn URL in canonical form (no trailing slash)
-    add("job_url", getCanonicalLinkedInUrl());
-
+    add("job_url", getCanonicalLinkedInUrl()); // canonical, no trailing slash
     add("platform", "LinkedIn");
     add("easy_apply", hasEasyApply());
     add("employment_type", employment_type);
@@ -216,42 +235,157 @@
     return missing.length > 0;
   };
 
-  const sendPayload = (payload) => {
-    window.postMessage({ type: "hidejobs-job-data", payload }, "*");
-    if (DEBUG) log("Posted payload to content-script:", payload);
+  // === Run control ===
+  const clearCurrentRun = () => {
+    if (STATE.retryTimeout) {
+      clearTimeout(STATE.retryTimeout);
+      STATE.retryTimeout = null;
+    }
+    if (STATE.readyObserver) {
+      STATE.readyObserver.disconnect();
+      STATE.readyObserver = null;
+    }
   };
 
-  const extractWithRetry = (attempt = 0) => {
+  const extractWithRetry = (attempt = 0, runId = STATE.runId) => {
     try {
+      if (runId !== STATE.runId) return; // ignore stale
+
       const payload = buildPayload();
       if (hasMissingCriticalData(payload) && attempt < MAX_RETRIES) {
         log(`Retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAY}ms…`);
-        setTimeout(() => extractWithRetry(attempt + 1), RETRY_DELAY);
+        STATE.retryTimeout = setTimeout(() => extractWithRetry(attempt + 1, runId), RETRY_DELAY);
       } else {
         if (hasMissingCriticalData(payload)) warn("Giving up after retries; sending whatever we have.");
         sendPayload(payload);
       }
     } catch (e) {
       error("Unexpected error during extraction:", e);
-      if (attempt < MAX_RETRIES) {
-        setTimeout(() => extractWithRetry(attempt + 1), RETRY_DELAY);
+      if (attempt < MAX_RETRIES && runId === STATE.runId) {
+        STATE.retryTimeout = setTimeout(() => extractWithRetry(attempt + 1, runId), RETRY_DELAY);
       }
     }
   };
 
-  // Start once the title or description appears (highly dynamic page)
-  const startWhenReady = () => {
+  // Start once the title or description appears
+  const startWhenReady = (runId = STATE.runId) => {
     const ready = !!(getJobTitle() || getEl("#job-details"));
-    if (DEBUG) log("Start check → ready:", ready);
-    if (ready) extractWithRetry();
-    return ready;
+    if (DEBUG) log("Start check → ready:", ready, "runId:", runId, "current:", STATE.runId);
+
+    if (runId !== STATE.runId) return false; // stale
+    if (ready) {
+      extractWithRetry(0, runId);
+      return true;
+    }
+
+    if (STATE.readyObserver) STATE.readyObserver.disconnect();
+    STATE.readyObserver = new MutationObserver(() => {
+      if (runId !== STATE.runId) return;
+      const ok = !!(getJobTitle() || getEl("#job-details"));
+      if (DEBUG) log("Mutation tick → ready:", ok);
+      if (ok) {
+        STATE.readyObserver.disconnect();
+        STATE.readyObserver = null;
+        extractWithRetry(0, runId);
+      }
+    });
+    STATE.readyObserver.observe(document.body, { childList: true, subtree: true });
+    if (DEBUG) log("MutationObserver attached (waiting for job content)…");
+    return false;
   };
 
-  if (!startWhenReady()) {
-    const observer = new MutationObserver(() => {
-      if (startWhenReady()) observer.disconnect();
+  // === URL Change trigger (NO DEBOUNCE. IMMEDIATE.) ===
+  const triggerRescrapeNow = (reason = "unknown", nextHref = null) => {
+    const href = nextHref || window.location.href;
+    if (href === STATE.lastUrl) return;
+
+    log("URL changed → IMMEDIATE skeleton + rescrape. Reason:", reason, "old:", STATE.lastUrl, "new:", href);
+
+    // 1) Show Skeleton immediately
+    sendLoading();
+
+    // 2) Lock to new URL and restart run
+    STATE.lastUrl = href;
+    clearCurrentRun();
+    STATE.runId += 1;
+    startWhenReady(STATE.runId);
+  };
+
+  // === URL Change Hooks ===
+  const setupUrlChangeDetection = () => {
+    // 1) Hook history.pushState / replaceState — send loading BEFORE calling native method
+    try {
+      const _pushState = history.pushState;
+      const _replaceState = history.replaceState;
+
+      history.pushState = function (state, title, url) {
+        // compute absolute next URL (if provided)
+        let nextHref = window.location.href;
+        if (url != null) {
+          try {
+            nextHref = new URL(url, window.location.href).href;
+          } catch (_) {}
+        }
+        triggerRescrapeNow("history.pushState(pre)", nextHref);
+
+        const ret = _pushState.apply(this, arguments);
+        // also call once more after, in case site mutates URL further
+        triggerRescrapeNow("history.pushState(post)");
+        return ret;
+      };
+
+      history.replaceState = function (state, title, url) {
+        let nextHref = window.location.href;
+        if (url != null) {
+          try {
+            nextHref = new URL(url, window.location.href).href;
+          } catch (_) {}
+        }
+        triggerRescrapeNow("history.replaceState(pre)", nextHref);
+
+        const ret = _replaceState.apply(this, arguments);
+        triggerRescrapeNow("history.replaceState(post)");
+        return ret;
+      };
+
+      log("Patched history.pushState/replaceState (pre + post).");
+    } catch (e) {
+      warn("Failed to patch history API:", e);
+    }
+
+    // 2) popstate / hashchange — send loading immediately on event
+    window.addEventListener("popstate", () => triggerRescrapeNow("popstate"));
+    window.addEventListener("hashchange", () => triggerRescrapeNow("hashchange"));
+
+    // 3) Observe DOM mutations that might change URL without history events (rare)
+    if (STATE.urlObserver) STATE.urlObserver.disconnect();
+    STATE.urlObserver = new MutationObserver(() => {
+      const href = window.location.href;
+      if (href !== STATE.lastUrl) triggerRescrapeNow("dom-mutation", href);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
-    if (DEBUG) log("MutationObserver attached (waiting for job content)...");
-  }
+    STATE.urlObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+    // 4) Interval fallback
+    if (STATE.urlInterval) clearInterval(STATE.urlInterval);
+    STATE.urlInterval = setInterval(() => {
+      const href = window.location.href;
+      if (href !== STATE.lastUrl) triggerRescrapeNow("interval", href);
+    }, URL_CHECK_INTERVAL);
+
+    log("URL change detection initialized (no debounce).");
+  };
+
+  // === Initial boot ===
+  const boot = () => {
+    setupUrlChangeDetection();
+
+    // On first load, show Skeleton immediately, then scrape
+    sendLoading();
+
+    STATE.lastUrl = window.location.href;
+    STATE.runId += 1;
+    startWhenReady(STATE.runId);
+  };
+
+  boot();
 })();
