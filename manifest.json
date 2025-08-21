@@ -78,7 +78,8 @@
         "content-applied.js",
         "content-viewed.js",
         "content-keywords.js",
-        "content-hours-patch.js"
+        "content-hours-patch.js",
+        "content-companies.js" 
       ],
       "run_at": "document_idle"
     }

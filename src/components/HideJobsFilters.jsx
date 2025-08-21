@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Switch, Typography, Tooltip } from "antd";
 import { InfoCircleOutlined, CrownFilled } from "@ant-design/icons";
 
+import CompaniesHideList from "./CompaniesHideList";
+
 const { Text } = Typography;
 
 // ---- Single source of truth: <key>BadgeVisible (and legacy dismissedBadgeVisible) ----
@@ -213,6 +215,8 @@ export default function HideJobsFilters() {
             </div>
           );
         })}
+
+        <CompaniesHideList />
 
         {/* Section: Settings */}
         <div className="px-3 py-2 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">

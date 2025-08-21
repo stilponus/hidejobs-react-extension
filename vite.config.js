@@ -43,8 +43,8 @@ export default defineConfig({
         "content-viewed": path.resolve(__dirname, "src/content-scripts/content-viewed.js"),
         "content-keywords": path.resolve(__dirname, "src/content-scripts/content-keywords.js"),
         "content-hours-patch": path.resolve(__dirname, "src/content-scripts/content-hours-patch.js"),
+        "content-companies": path.resolve(__dirname, "src/content-scripts/content-companies.js"),
 
-        
       },
       output: {
         entryFileNames: '[name].js'
