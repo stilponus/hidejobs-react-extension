@@ -1,7 +1,10 @@
+// src/components/HideJobsPanelShell.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { Button, Dropdown } from "antd";
 import {
   MenuOutlined,
+  PlusSquareOutlined,
+  ClearOutlined,
   HomeFilled,
   FileDoneOutlined,
   DoubleRightOutlined,
@@ -16,6 +19,7 @@ import HideJobsPanelContent from "./HideJobsPanelContent";
 import HideJobsPanelCustomJob from "./HideJobsPanelCustomJob";
 import HideJobsPanelSave from "./HideJobsPanelSave";
 import HideJobsPanelLoginRequired from "./HideJobsPanelLoginRequired";
+import HideJobsFilters from "./HideJobsFilters";
 
 const HideJobsPanelShell = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -26,14 +30,23 @@ const HideJobsPanelShell = () => {
   const [manualMode, setManualMode] = useState(false);
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [panelView, setPanelView] = useState("default");
+
+  useEffect(() => {
+    chrome?.storage?.local?.get(["hidejobs_panel_view"], (result) => {
+      const v = result?.hidejobs_panel_view;
+      if (v === "filters" || v === "default") setPanelView(v);
+    });
+  }, []);
+
   const containerRef = useRef(null);
   const buttonRef = useRef(null);
   const dragState = useRef({ drag: false, dragged: false, startY: 0, initTop: 0 });
 
   // Check login status on mount and listen for storage changes
   useEffect(() => {
-    chrome.storage.local.get("user", (result) => {
-      setIsLoggedIn(!!result.user?.uid);
+    chrome?.storage?.local?.get("user", (result) => {
+      setIsLoggedIn(!!result?.user?.uid);
     });
 
     const handleStorageChange = (changes, namespace) => {
@@ -42,9 +55,9 @@ const HideJobsPanelShell = () => {
       }
     };
 
-    chrome.storage.onChanged.addListener(handleStorageChange);
+    chrome?.storage?.onChanged?.addListener(handleStorageChange);
     return () => {
-      chrome.storage.onChanged.removeListener(handleStorageChange);
+      chrome?.storage?.onChanged?.removeListener(handleStorageChange);
     };
   }, []);
 
@@ -97,8 +110,10 @@ const HideJobsPanelShell = () => {
         dragState.current.dragged = false;
         return;
       }
+      setPanelView("default");
+      chrome?.storage?.local?.set({ hidejobs_panel_view: "default" });
       setIsPanelVisible(true);
-      chrome.storage.local.set({ hidejobs_panel_visible: true });
+      chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
       setIsButtonVisible(false);
     };
 
@@ -120,7 +135,9 @@ const HideJobsPanelShell = () => {
     const toggleHandler = () => {
       setIsPanelVisible((prev) => {
         const nowVisible = !prev;
-        chrome.storage.local.set({ hidejobs_panel_visible: nowVisible });
+        // keep last view in storage as well (no change to state)
+        chrome?.storage?.local?.set({ hidejobs_panel_view: panelView });
+        chrome?.storage?.local?.set({ hidejobs_panel_visible: nowVisible });
         if (nowVisible) setIsButtonVisible(false);
         if (!nowVisible) setIsButtonVisible(true);
         return nowVisible;
@@ -128,13 +145,12 @@ const HideJobsPanelShell = () => {
     };
     window.addEventListener("toggle-hidejobs-panel", toggleHandler);
     return () => window.removeEventListener("toggle-hidejobs-panel", toggleHandler);
-  }, []);
+  }, [panelView]);
 
   // Show button after delay
   useEffect(() => {
-    setTimeout(() => {
-      setIsButtonVisible(true);
-    }, 1000);
+    const t = setTimeout(() => setIsButtonVisible(true), 1000);
+    return () => clearTimeout(t);
   }, []);
 
   // Detect manual mode
@@ -151,7 +167,7 @@ const HideJobsPanelShell = () => {
     if (trackedJobId) {
       const url = `https://app.hidejobs.com/job-tracker/${trackedJobId}`;
       console.log("🔓 Opening job in app:", url);
-      chrome.runtime.sendMessage({ type: "open-tab", url });
+      chrome?.runtime?.sendMessage?.({ type: "open-tab", url });
     } else {
       console.warn("⚠️ No tracked_job_id available");
     }
@@ -177,11 +193,42 @@ const HideJobsPanelShell = () => {
 
   const dropdownItems = [
     {
+      key: "job-panel",
+      label: "Job Panel",
+      icon: <PlusSquareOutlined />,
+      onClick: () => {
+        setPanelView("default");
+        chrome?.storage?.local?.set({ hidejobs_panel_view: "default" });
+        setIsPanelVisible(true);
+        chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
+        setIsButtonVisible(false);
+        setDropdownOpen(false);
+      },
+    },
+    {
+      key: "filters",
+      label: "Filters",
+      icon: <ClearOutlined />,
+      onClick: () => {
+        setPanelView("filters");
+        chrome?.storage?.local?.set({ hidejobs_panel_view: "filters" });
+        setIsPanelVisible(true);
+        chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
+        setIsButtonVisible(false);
+        setDropdownOpen(false);
+      },
+    },
+    { type: "divider" }, // 👈 Divider BELOW Filters
+
+    {
       key: "home",
       label: "Dashboard",
       icon: <HomeFilled />,
       onClick: () => {
-        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/home" });
+        chrome?.runtime?.sendMessage?.({
+          type: "open-tab",
+          url: "https://app.hidejobs.com/home",
+        });
         setDropdownOpen(false);
       },
     },
@@ -190,7 +237,10 @@ const HideJobsPanelShell = () => {
       label: "Resume Builder",
       icon: <FileDoneOutlined />,
       onClick: () => {
-        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/resume-builder" });
+        chrome?.runtime?.sendMessage?.({
+          type: "open-tab",
+          url: "https://app.hidejobs.com/resume-builder",
+        });
         setDropdownOpen(false);
       },
     },
@@ -199,7 +249,10 @@ const HideJobsPanelShell = () => {
       label: "Job Tracker",
       icon: <DoubleRightOutlined />,
       onClick: () => {
-        chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/job-tracker" });
+        chrome?.runtime?.sendMessage?.({
+          type: "open-tab",
+          url: "https://app.hidejobs.com/job-tracker",
+        });
         setDropdownOpen(false);
       },
     },
@@ -269,8 +322,7 @@ const HideJobsPanelShell = () => {
       </style>
       <div
         ref={buttonRef}
-        className={`button-wrapper fixed top-[70%] border-none z-[9999] flex items-center rounded-l-md shadow-xl ${isButtonVisible && !isPanelVisible ? "slide-visible" : ""
-          }`}
+        className={`button-wrapper fixed top-[70%] border-none z-[9999] flex items-center rounded-l-md shadow-xl ${isButtonVisible && !isPanelVisible ? "slide-visible" : ""}`}
       >
         <div className="blue-section cursor-pointer">
           <LogoNoBackground className="w-10 h-10" />
@@ -282,14 +334,13 @@ const HideJobsPanelShell = () => {
       </div>
       <div
         ref={containerRef}
-        className={`fixed top-[20px] right-[-400px] w-96 h-[90vh] rounded-xl shadow-2xl border-1 border-gray-200 bg-white z-[9999] flex flex-col overflow-hidden text-gray-800 font-sans transition-right duration-[0.4s] ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] user-select-none ${isPanelVisible ? "right-[20px]" : ""
-          }`}
+        className={`fixed top-[20px] right-[-400px] w-96 h-[90vh] rounded-xl shadow-2xl border-1 border-gray-200 bg-white z-[9999] flex flex-col overflow-hidden text-gray-800 font-sans transition-right duration-[0.4s] ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] user-select-none ${isPanelVisible ? "right-[20px]" : ""}`}
       >
         {/* Sticky Header */}
         <div className="bg-hidejobs-50 shrink-0 sticky top-0 z-10 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <Logo className="w-6 h-6" />
-            <span className="text-lg font-bold text-hidejobs-700">{title}</span>
+            <span className="text-lg font-bold text-hidejobs-700">HideJobs</span>
           </div>
           <div className="flex items-center gap-2">
             <Dropdown
@@ -314,9 +365,10 @@ const HideJobsPanelShell = () => {
               type="text"
               icon={<CloseOutlined className="text-xl" />}
               onClick={() => {
+                chrome?.storage?.local?.set({ hidejobs_panel_view: panelView }); // keep last view
                 setIsPanelVisible(false);
                 setIsButtonVisible(true);
-                chrome.storage.local.set({ hidejobs_panel_visible: false });
+                chrome?.storage?.local?.set({ hidejobs_panel_visible: false });
               }}
               className="hover:bg-gray-200 rounded-full"
             />
@@ -325,11 +377,15 @@ const HideJobsPanelShell = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 text-sm">
-          {isLoggedIn ? content : <HideJobsPanelLoginRequired />}
+          {isLoggedIn ? (
+            panelView === "filters" ? <HideJobsFilters /> : content
+          ) : (
+            <HideJobsPanelLoginRequired />
+          )}
         </div>
 
         {/* Sticky Footer */}
-        {isLoggedIn && (
+        {isLoggedIn && panelView === "default" && (
           <div className="shrink-0 sticky bottom-0 z-10 bg-hidejobs-50 border-t border-gray-200 px-4 py-3 flex justify-center items-center">
             <HideJobsPanelSave
               data={data}
