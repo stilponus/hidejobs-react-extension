@@ -76,7 +76,8 @@
         "content-dismissed.js",
         "content-promoted.js",
         "content-applied.js",
-        "content-viewed.js"
+        "content-viewed.js",
+        "content-keywords.js" 
       ],
       "run_at": "document_idle"
     }

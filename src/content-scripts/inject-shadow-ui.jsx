@@ -1,10 +1,19 @@
-import React from "react";
+// src/entry/inject-shadow-ui.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import HideJobsPanelShell from "../components/HideJobsPanelShell";
 import BadgesHost from "../components/BadgesHost";
+import KeywordFilterPanel from "../components/KeywordFilterPanel";
 import { StyleProvider } from "antd-style";
 import { ConfigProvider } from "antd";
 import tailwindCss from "../index.css?inline";
+
+function isJobPage(href = location.href) {
+  return (
+    href.startsWith("https://www.linkedin.com/jobs/search") ||
+    href.startsWith("https://www.linkedin.com/jobs/collections")
+  );
+}
 
 (function mountHideJobsPanelShadowUI() {
   console.log("🟡 content-script loaded");
@@ -39,50 +48,99 @@ import tailwindCss from "../index.css?inline";
   shadowRoot.appendChild(style);
 
   const container = document.createElement("div");
+  // This container holds the whole UI (panel + badges + keywords)
+  // Set a BASE z-index; inner components can set their own (badges 9995, panel >9995)
   container.style.position = "relative";
-  container.style.zIndex = "9999";
+  container.style.zIndex = "9990";
   shadowRoot.appendChild(container);
 
-  const root = createRoot(container);
+  const App = () => {
+    const [showKeywords, setShowKeywords] = useState(false);
+    const [href, setHref] = useState(location.href);
 
-  root.render(
-    <StyleProvider container={shadowRoot}>
-      <ConfigProvider
-        getPopupContainer={() => container}
-        theme={{
-          token: {
-            colorPrimary: "#28507c",
-            fontFamily: "Inter, sans-serif",
-            zIndexPopupBase: 10000,
-          },
-          components: {
-            Button: {
+    // Read initial “Keywords” toggle from storage
+    useEffect(() => {
+      chrome?.storage?.local?.get(["userTextBadgeVisible", "userText"], (res) => {
+        // Your switches use <key>BadgeVisible; keep supporting both keys
+        const v = typeof res?.userTextBadgeVisible === "boolean"
+          ? !!res.userTextBadgeVisible
+          : !!res?.userText; // fallback if you ever used `userText`
+        setShowKeywords(v);
+      });
+
+      const onChange = (changes, area) => {
+        if (area !== "local") return;
+        if ("userTextBadgeVisible" in changes) {
+          setShowKeywords(!!changes.userTextBadgeVisible.newValue);
+        } else if ("userText" in changes) {
+          // back-compat fallback
+          setShowKeywords(!!changes.userText.newValue);
+        }
+      };
+      chrome?.storage?.onChanged?.addListener(onChange);
+      return () => chrome?.storage?.onChanged?.removeListener(onChange);
+    }, []);
+
+    // Track SPA URL changes so we only show on job pages
+    useEffect(() => {
+      let last = location.href;
+      const id = setInterval(() => {
+        if (location.href !== last) {
+          last = location.href;
+          setHref(last);
+        }
+      }, 800);
+      return () => clearInterval(id);
+    }, []);
+
+    const shouldShowKeywordPanel = isJobPage(href) && showKeywords;
+
+    return (
+      <StyleProvider container={shadowRoot}>
+        <ConfigProvider
+          getPopupContainer={() => container}
+          theme={{
+            token: {
               colorPrimary: "#28507c",
-              colorPrimaryHover: "#306399",
-              colorPrimaryActive: "#233b57",
+              fontFamily: "Inter, sans-serif",
+              zIndexPopupBase: 10000,
             },
-            Dropdown: {
-              colorBgElevated: "#ffffff",
-              colorText: "#28507c",
-              colorTextHover: "#e7eef7",
-              controlItemBgHover: "#f5f5f5",
-              borderRadiusLG: 8,
-              fontSize: 14,
-              zIndexPopup: 10000,
+            components: {
+              Button: {
+                colorPrimary: "#28507c",
+                colorPrimaryHover: "#306399",
+                colorPrimaryActive: "#233b57",
+              },
+              Dropdown: {
+                colorBgElevated: "#ffffff",
+                colorText: "#28507c",
+                colorTextHover: "#e7eef7",
+                controlItemBgHover: "#f5f5f5",
+                borderRadiusLG: 8,
+                fontSize: 14,
+                zIndexPopup: 10000,
+              },
+              Tag: {
+                borderRadiusSM: 20,
+              },
             },
-            Tag: {
-              borderRadiusSM: 20,
-            },
-          },
-        }}
-      >
-        {/* Your panel stays as-is */}
-        <HideJobsPanelShell />
-        {/* Reusable badge stack */}
-        <BadgesHost />
-      </ConfigProvider>
-    </StyleProvider>
-  );
+          }}
+        >
+          {/* Main side panel */}
+          <HideJobsPanelShell />
+
+          {/* Badge stack (top-right etc.) */}
+          <BadgesHost />
+
+          {/* ✅ Keywords panel lives in the SAME shadow root as badges, only on job pages when toggle is ON */}
+          <KeywordFilterPanel visible={shouldShowKeywordPanel} />
+        </ConfigProvider>
+      </StyleProvider>
+    );
+  };
+
+  const root = createRoot(container);
+  root.render(<App />);
 
   // Toggle panel from background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
