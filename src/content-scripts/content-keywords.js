@@ -13,8 +13,8 @@
   let obs = null;
   let isOn = false;
   let keywords = [];
-  let hiddenCount = 0;
-  const seen = new Set();
+  let hiddenKeywordCount = 0;
+  let countedKeywordJobIds = new Set();
 
   function readKeywords(cb) {
     chrome?.storage?.local?.get(["filterKeywords"], (res) => {
@@ -32,67 +32,129 @@
     return false;
   }
 
-  function recalc() {
-    if (!isJobPage()) {
-      chrome?.storage?.local?.set({ userTextHiddenCount: 0 });
-      return;
-    }
+  function getJobId(job) {
+    return job.getAttribute('data-job-id') || 
+           job.getAttribute('data-occludable-job-id') || 
+           job.innerText.trim();
+  }
 
-    const rows = document.querySelectorAll(CARD_ROWS);
-    hiddenCount = 0;
-    seen.clear();
+  function updateKeywordCountDisplay() {
+    chrome?.storage?.local?.set({ 
+      keywordHiddenCount: hiddenKeywordCount,
+      countedKeywordJobIds: Array.from(countedKeywordJobIds)
+    });
+  }
 
-    rows.forEach((li) => {
-      // restore to base; other filters may hide as well
-      // we DO NOT force-restore here to avoid fighting other filters
-      const id = li.getAttribute("data-occludable-job-id") || li.getAttribute("data-job-id") || "";
-      const key = id || li;
-      if (seen.has(key)) return;
-      seen.add(key);
+  function hideKeywordJobListings() {
+    if (!keywords.length) return;
 
-      // find the inner node with text
-      const inner = li.matches(TEXT_NODES) ? li : (li.querySelector(TEXT_NODES) || li);
-      const text = inner?.innerText || li.innerText || "";
+    const jobs = document.querySelectorAll(TEXT_NODES);
 
-      const shouldHide = isOn && keywords.length > 0 && matchesAnyKeyword(text, keywords);
-      if (shouldHide) {
-        if (li.style.display !== "none") {
-          li.style.display = "none";
-          li.dataset.hiddenBy = "keyword";
-        }
-        hiddenCount++;
-      } else {
-        // Only clear our own marker if we previously hid it
-        if (li.dataset.hiddenBy === "keyword") {
-          li.style.display = "";
-          delete li.dataset.hiddenBy;
+    jobs.forEach(job => {
+      // Only process visible jobs to avoid double-counting
+      if (job.style.display !== 'none') {
+        const jobText = job.innerText.toLowerCase();
+        if (matchesAnyKeyword(jobText, keywords)) {
+          // Hide the job
+          job.style.display = 'none';
+          job.dataset.hiddenBy = "keyword";
+
+          const parentLi = job.closest("li");
+          if (parentLi) {
+            parentLi.style.display = 'none';
+            parentLi.dataset.hiddenBy = "keyword";
+          }
+
+          // Count it ONLY if we haven't counted it before
+          const jobId = getJobId(job);
+          if (jobId && !countedKeywordJobIds.has(jobId)) {
+            countedKeywordJobIds.add(jobId);
+            hiddenKeywordCount++;
+            updateKeywordCountDisplay();
+          }
         }
       }
     });
 
-    chrome?.storage?.local?.set({ userTextHiddenCount: hiddenCount });
+    // Apply other filters
+    if (window.hideJobsUtils?.applyOverlaysFromLocalStorage) {
+      window.hideJobsUtils.applyOverlaysFromLocalStorage();
+    }
+    
+    if (window.hideJobsUI?.checkHideButtons) {
+      window.hideJobsUI.checkHideButtons();
+    }
+  }
+
+  function restoreJobsByKeyword(keyword) {
+    const jobs = document.querySelectorAll(TEXT_NODES);
+    jobs.forEach(job => {
+      const jobText = job.innerText.toLowerCase();
+      if (jobText.includes(keyword.toLowerCase())) {
+        job.style.display = '';
+        job.removeAttribute('data-hidden-by');
+        
+        const parentLi = job.closest("li");
+        if (parentLi) {
+          parentLi.style.display = '';
+          parentLi.removeAttribute('data-hidden-by');
+        }
+
+        // Remove from count ONLY if we had counted it
+        const jobId = getJobId(job);
+        if (jobId && countedKeywordJobIds.has(jobId)) {
+          countedKeywordJobIds.delete(jobId);
+          hiddenKeywordCount = Math.max(0, hiddenKeywordCount - 1);
+          updateKeywordCountDisplay();
+        }
+      }
+    });
+
+    if (window.hideJobsUI?.checkHideButtons) {
+      window.hideJobsUI.checkHideButtons();
+    }
+  }
+
+  function restoreAllKeywordJobs() {
+    // Restore all jobs we've hidden
+    countedKeywordJobIds.forEach(jobId => {
+      let jobNode = document.querySelector(`[data-job-id="${jobId}"], [data-occludable-job-id="${jobId}"]`);
+      if (!jobNode) {
+        // Fallback: find by text content if ID-based search fails
+        const jobs = document.querySelectorAll(TEXT_NODES);
+        jobNode = Array.from(jobs).find(job => getJobId(job) === jobId);
+      }
+      
+      if (jobNode && jobNode.dataset.hiddenBy === "keyword") {
+        jobNode.style.display = '';
+        jobNode.removeAttribute('data-hidden-by');
+        
+        const parentLi = jobNode.closest("li");
+        if (parentLi && parentLi.dataset.hiddenBy === "keyword") {
+          parentLi.style.display = '';
+          parentLi.removeAttribute('data-hidden-by');
+        }
+      }
+    });
+
+    // Reset counts
+    hiddenKeywordCount = 0;
+    countedKeywordJobIds.clear();
+    updateKeywordCountDisplay();
   }
 
   function hideNow() {
     isOn = true;
     readKeywords((list) => {
       keywords = list;
-      recalc();
+      hideKeywordJobListings();
       bindObserver();
     });
   }
 
   function showNow() {
     isOn = false;
-    const rows = document.querySelectorAll(CARD_ROWS);
-    rows.forEach((li) => {
-      if (li.dataset.hiddenBy === "keyword") {
-        li.style.display = "";
-        delete li.dataset.hiddenBy;
-      }
-    });
-    hiddenCount = 0;
-    chrome?.storage?.local?.set({ userTextHiddenCount: 0 });
+    restoreAllKeywordJobs();
     unbindObserver();
   }
 
@@ -104,21 +166,60 @@
     if (!container) return;
 
     if (obs) obs.disconnect();
-    obs = new MutationObserver(() => recalc());
-    obs.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+    obs = new MutationObserver(() => {
+      // Debounce the calls
+      clearTimeout(obs.debounceTimer);
+      obs.debounceTimer = setTimeout(() => {
+        if (isOn && keywords.length > 0) {
+          hideKeywordJobListings();
+        }
+      }, 50);
+    });
+    obs.observe(container, { 
+      childList: true, 
+      subtree: true, 
+      attributes: true, 
+      attributeFilter: ["style", "class"] 
+    });
   }
 
   function unbindObserver() {
-    if (obs) obs.disconnect();
+    if (obs) {
+      clearTimeout(obs.debounceTimer);
+      obs.disconnect();
+    }
     obs = null;
   }
 
-  // Init from storage
-  chrome?.storage?.local?.get(["userTextHidden", "filterKeywords"], (res) => {
-    isOn = !!res?.userTextHidden;
-    keywords = Array.isArray(res?.filterKeywords) ? res.filterKeywords : [];
-    if (isOn) hideNow(); else showNow();
-  });
+  function applyStoredUserTextState() {
+    // Handle pages that are not job pages
+    if (!isJobPage()) {
+      // Don't reset counts when navigating away from job pages
+      chrome?.storage?.local?.set({ keywordHiddenCount: 0 });
+      unbindObserver();
+      return;
+    }
+
+    chrome?.storage?.local?.get(["userTextHidden", "filterKeywords", "keywordHiddenCount", "countedKeywordJobIds"], (res) => {
+      isOn = !!res?.userTextHidden;
+      keywords = Array.isArray(res?.filterKeywords) ? res.filterKeywords : [];
+      
+      // Restore persistent counts (don't reset on URL changes within job pages)
+      if (typeof res?.keywordHiddenCount === 'number') {
+        hiddenKeywordCount = res.keywordHiddenCount;
+      }
+      if (Array.isArray(res?.countedKeywordJobIds)) {
+        countedKeywordJobIds = new Set(res.countedKeywordJobIds);
+      }
+      
+      if (isOn && keywords.length > 0) {
+        hideKeywordJobListings();
+        bindObserver();
+      } else {
+        unbindObserver();
+      }
+    });
+  }
 
   // React to storage changes
   chrome?.storage?.onChanged?.addListener((changes, area) => {
@@ -133,21 +234,47 @@
 
     // Keywords changed → rerun if ON
     if ("filterKeywords" in changes) {
-      keywords = Array.isArray(changes.filterKeywords.newValue) ? changes.filterKeywords.newValue : [];
-      if (isOn) recalc();
+      const newKeywords = Array.isArray(changes.filterKeywords.newValue) ? changes.filterKeywords.newValue : [];
+      const oldKeywords = keywords;
+      keywords = newKeywords;
+      
+      if (isOn) {
+        // If all keywords were removed, restore all jobs and reset count
+        if (newKeywords.length === 0) {
+          restoreAllKeywordJobs();
+        } else {
+          // Find removed keywords and restore their jobs
+          const removedKeywords = oldKeywords.filter(k => !newKeywords.includes(k));
+          removedKeywords.forEach(keyword => restoreJobsByKeyword(keyword));
+          
+          // Hide jobs for current keywords
+          hideKeywordJobListings();
+        }
+      }
     }
   });
 
-  // SPA URL watcher
+  // SPA URL watcher - DON'T reset counts on job page navigation
   setInterval(() => {
     const u = location.href;
     if (u !== lastUrl) {
       lastUrl = u;
-      if (!isJobPage()) {
-        showNow();
-      } else {
-        if (isOn) hideNow();
-      }
+      applyStoredUserTextState();
     }
   }, 1000);
+
+  // Initialize - reset count if no keywords exist
+  chrome?.storage?.local?.get(["filterKeywords"], (res) => {
+    const storedKeywords = Array.isArray(res?.filterKeywords) ? res.filterKeywords : [];
+    if (storedKeywords.length === 0) {
+      // No keywords = no hidden jobs = reset count
+      hiddenKeywordCount = 0;
+      countedKeywordJobIds.clear();
+      chrome?.storage?.local?.set({ 
+        keywordHiddenCount: 0,
+        countedKeywordJobIds: []
+      });
+    }
+    applyStoredUserTextState();
+  });
 })();

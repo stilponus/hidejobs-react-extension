@@ -13,21 +13,22 @@ function getChrome() {
 // Same chip style as your other badges (pill with a small count chip)
 // ✅ Always renders, including when count === 0
 function CountBadge({ count }) {
-  const isOneDigit = count < 10;
   return (
     <span
       style={{
-        backgroundColor: "#f8fafd",
-        color: "#000",
-        fontWeight: 600,
-        fontSize: 12,
-        lineHeight: "20px",
-        textAlign: "center",
-        minWidth: isOneDigit ? 20 : "auto",
         height: 20,
-        padding: "0 6px",
-        borderRadius: isOneDigit ? "50%" : 12,
-        display: "inline-block",
+        minWidth: 20,                    // makes 1-digit exactly 20×20 circle
+        padding: "0 4px",                // stretch for 2+ digits
+        borderRadius: 25,
+        fontSize: 14,
+        lineHeight: "20px",
+        background: "#f8fafd",
+        color: "#00000099",
+        fontWeight: 600,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box",
         marginLeft: 4,
       }}
     >
@@ -41,7 +42,7 @@ export default function KeywordFilterPanel({ visible }) {
   const [keywords, setKeywords] = useState([]);
   const [input, setInput] = useState("");
 
-  // Hidden jobs (by keywords) counter
+  // Hidden jobs (by keywords) counter - synced with content script
   const [hiddenCount, setHiddenCount] = useState(0);
 
   // --- Drag state ---
@@ -50,142 +51,100 @@ export default function KeywordFilterPanel({ visible }) {
   const [dragging, setDragging] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
-  // Load initial keywords + saved position (if any) + last persisted count
+  // Load initial keywords + saved position + count from content script
   useEffect(() => {
     if (!chromeApi) return;
     chromeApi.storage?.local?.get(
       ["filterKeywords", "keywordPanelPos", "keywordHiddenCount"],
       (res) => {
-        setKeywords(Array.isArray(res?.filterKeywords) ? res.filterKeywords : []);
-        if (typeof res?.keywordHiddenCount === "number") {
-          setHiddenCount(res.keywordHiddenCount); // show last known value immediately
+        const keywords = Array.isArray(res?.filterKeywords) ? res.filterKeywords : [];
+        setKeywords(keywords);
+
+        // Only show count if there are actually keywords
+        if (keywords.length === 0) {
+          setHiddenCount(0);
+        } else {
+          const count = typeof res?.keywordHiddenCount === 'number' ? res.keywordHiddenCount : 0;
+          setHiddenCount(count);
         }
+
+        // restore saved position
         const saved = res?.keywordPanelPos;
         if (saved && typeof saved.top === "number" && typeof saved.left === "number") {
-          setPos((prev) => clampToViewport(saved, wrapperRef.current));
+          setPos(clampToViewport(saved, wrapperRef.current));
         }
       }
     );
   }, [chromeApi]);
 
-  // === Hidden-by-keywords count ============================================
-  const recalcHiddenByKeywords = () => {
-    try {
-      // We mark elements with data-hidden-by="keyword" (li or job nodes).
-      // Prefer parent <li>, but count any element with that marker.
-      const n =
-        document.querySelectorAll('li[data-hidden-by="keyword"]').length ||
-        document.querySelectorAll('[data-hidden-by="keyword"]').length;
-
-      setHiddenCount(n);
-      // persist so it stays across unmount/mount or quick nav blips
-      chromeApi?.storage?.local?.set({ keywordHiddenCount: n });
-    } catch {
-      setHiddenCount(0);
-      chromeApi?.storage?.local?.set({ keywordHiddenCount: 0 });
-    }
-  };
-
-  // Recalc on DOM changes in the jobs list (SPA updates)
-  useEffect(() => {
-    const target =
-      document.querySelector(".scaffold-layout__list, .jobs-search-results-list") || document.body;
-
-    let debounceId = null;
-    const obs = new MutationObserver(() => {
-      clearTimeout(debounceId);
-      debounceId = setTimeout(recalcHiddenByKeywords, 60);
-    });
-
-    if (target) {
-      obs.observe(target, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["style", "data-hidden-by", "class"],
-      });
-    }
-    // Initial calc
-    recalcHiddenByKeywords();
-
-    return () => {
-      clearTimeout(debounceId);
-      obs.disconnect();
-    };
-  }, []);
-
-  // Also recalc when keywords list changes in storage (your content script will hide/show)
+  // Listen for count updates from content script
   useEffect(() => {
     if (!chromeApi?.storage?.onChanged) return;
+    
     const handler = (changes, area) => {
       if (area !== "local") return;
-      if ("filterKeywords" in changes || "userTextHidden" in changes) {
-        setTimeout(recalcHiddenByKeywords, 0);
+
+      // Content script updated the count
+      if ("keywordHiddenCount" in changes) {
+        const newCount = changes.keywordHiddenCount.newValue;
+        if (typeof newCount === 'number') {
+          setHiddenCount(newCount);
+        }
+      }
+
+      // Keywords changed - reset count if no keywords
+      if ("filterKeywords" in changes) {
+        const newKeywords = changes.filterKeywords.newValue || [];
+        setKeywords(newKeywords);
+        // Always reset count to 0 when keywords are cleared
+        if (newKeywords.length === 0) {
+          setHiddenCount(0);
+        }
       }
     };
+    
     chromeApi.storage.onChanged.addListener(handler);
     return () => chromeApi.storage.onChanged.removeListener(handler);
   }, [chromeApi]);
 
-  // Recalc on URL changes (SPA route changes)
-  useEffect(() => {
-    let lastHref = window.location.href;
-    const timer = setInterval(() => {
-      if (window.location.href !== lastHref) {
-        lastHref = window.location.href;
-        // let the page render, then recalc
-        setTimeout(recalcHiddenByKeywords, 80);
-      }
-    }, 500);
-    return () => clearInterval(timer);
-  }, []);
-  // ========================================================================
-
   // Helpers
   const persistKeywords = (next) => {
     setKeywords(next);
-    chromeApi?.storage?.local?.set({ filterKeywords: next }, () =>
-      setTimeout(recalcHiddenByKeywords, 0)
-    );
+    chromeApi?.storage?.local?.set({ filterKeywords: next });
   };
 
   const addKeyword = () => {
     const k = (input || "").trim();
     if (!k) return;
+    
     const next = Array.from(new Set([...keywords, k])).sort((a, b) => a.localeCompare(b));
     persistKeywords(next);
     setInput("");
-    chromeApi?.storage?.local?.set({ userTextHidden: true }, () =>
-      setTimeout(recalcHiddenByKeywords, 0)
-    );
+    
+    // Enable keyword filtering
+    chromeApi?.storage?.local?.set({ userTextHidden: true });
   };
 
   const removeKeyword = (k) => {
     const next = keywords.filter((x) => x !== k);
     persistKeywords(next);
-    chromeApi?.storage?.local?.set({ userTextHidden: true }, () =>
-      setTimeout(recalcHiddenByKeywords, 0)
-    );
+    
+    // Keep filtering enabled even after removing a keyword
+    chromeApi?.storage?.local?.set({ userTextHidden: true });
   };
 
   // --- Drag logic (drag anywhere except on inputs/buttons/close icons) ---
   const onMouseDown = (e) => {
     if (e.button !== 0) return; // left click only
-
     const target = e.target;
-    if (target.closest("input, textarea, button, .ant-input, .ant-btn, .ant-tag-close-icon")) {
-      return;
-    }
+    if (target.closest("input, textarea, button, .ant-input, .ant-btn, .ant-tag-close-icon")) return;
 
     const box = wrapperRef.current?.getBoundingClientRect();
     if (!box) return;
 
     setDragging(true);
-    dragOffsetRef.current = {
-      x: e.clientX - box.left,
-      y: e.clientY - box.top,
-    };
-    e.preventDefault(); // prevent text selection
+    dragOffsetRef.current = { x: e.clientX - box.left, y: e.clientY - box.top };
+    e.preventDefault();
   };
 
   const onMouseMove = (e) => {
@@ -218,13 +177,6 @@ export default function KeywordFilterPanel({ visible }) {
     }
   }, [dragging]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep inside viewport on resize
-  useEffect(() => {
-    const handleResize = () => setPos((p) => clampToViewport(p, wrapperRef.current));
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
   if (!visible) return null;
 
   // Wrapper is fixed + draggable; Card fills it.
@@ -246,11 +198,10 @@ export default function KeywordFilterPanel({ visible }) {
       okText: "Clear",
       okButtonProps: { danger: true },
       cancelText: "Cancel",
+      icon: null,
       onOk: () => {
         persistKeywords([]);
-        chromeApi?.storage?.local?.set({ userTextHidden: true }, () =>
-          setTimeout(recalcHiddenByKeywords, 0)
-        );
+        chromeApi?.storage?.local?.set({ userTextHidden: true });
       },
     });
   };
@@ -266,17 +217,29 @@ export default function KeywordFilterPanel({ visible }) {
           boxShadow: "0 4px 8px rgba(0,0,0,.12)",
           borderRadius: 8,
           cursor: "default",
+          border: "none",
         }}
-        headStyle={{ fontWeight: 700, userSelect: "none" }}
+        headStyle={{ 
+          fontWeight: 700, 
+          userSelect: "none", 
+          fontSize: 16,
+          backgroundColor: "#28507c",
+          color: "white"
+        }}
         title="Hide Jobs by Keywords"
         extra={
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {hasKeywords ? (
               <Tooltip title="Clear all keywords">
-                <Button type="text" size="small" icon={<DeleteOutlined />} onClick={showConfirmClear} />
+                <Button 
+                  type="text" 
+                  size="small" 
+                  icon={<DeleteOutlined style={{ color: "white" }} />} 
+                  onClick={showConfirmClear} 
+                />
               </Tooltip>
             ) : null}
-            {/* 🔢 Count of jobs hidden by keywords — persists and shows 0 */}
+            {/* 🔢 Count of jobs hidden by keywords — managed by content script */}
             <CountBadge count={hiddenCount} />
           </div>
         }
@@ -299,7 +262,15 @@ export default function KeywordFilterPanel({ visible }) {
             style={{ margin: "12px 0" }}
           />
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div 
+            style={{ 
+              display: "flex", 
+              flexWrap: "wrap", 
+              gap: 8, 
+              maxHeight: 202,
+              overflowY: "auto"
+            }}
+          >
             {keywords.map((k) => (
               <Tag
                 key={k}
@@ -337,3 +308,6 @@ function clampToViewport(pos, el, widthFallback = 320, heightFallback = 10) {
 
   return { top, left };
 }
+
+
+///////////////
