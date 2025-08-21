@@ -36,15 +36,16 @@ function getChrome() {
 export default function HideJobsFilters() {
   const chromeApi = useMemo(getChrome, []);
   const [values, setValues] = useState(DEFAULT_STATE);
+  const [compact, setCompact] = useState(false); // <<— NEW (Compact badges)
 
-  // Initial load: read *only* per-flag <key>BadgeVisible (plus legacy dismissedBadgeVisible)
+  // Initial load: read per-flag visibility + legacy dismissed key
   useEffect(() => {
     if (!chromeApi) return;
 
     const visibilityKeys = FILTER_KEYS.map((k) => `${k}BadgeVisible`);
 
     chromeApi.storage.local.get(
-      [...visibilityKeys, "dismissedBadgeVisible"], // legacy
+      [...visibilityKeys, "dismissedBadgeVisible", "badgesCompact"], // include compact
       (res) => {
         const next = { ...DEFAULT_STATE };
 
@@ -54,16 +55,17 @@ export default function HideJobsFilters() {
           }
         });
 
-        // Back-compat: if present, mirror to dismissed switch
+        // Back-compat: mirror legacy dismissed flag
         if (typeof res?.dismissedBadgeVisible === "boolean") {
           next.dismissed = !!res.dismissedBadgeVisible;
         }
 
         setValues(next);
+        setCompact(!!res?.badgesCompact); // set compact from storage
       }
     );
 
-    // Listen for storage changes and update only the touched flags
+    // Listen for storage changes (flags + compact)
     const handleStorage = (changes, area) => {
       if (area !== "local") return;
 
@@ -78,10 +80,13 @@ export default function HideJobsFilters() {
         }
       });
 
-      // legacy key support
       if ("dismissedBadgeVisible" in changes) {
         delta.dismissed = !!changes.dismissedBadgeVisible.newValue;
         touched = true;
+      }
+
+      if ("badgesCompact" in changes) {
+        setCompact(!!changes.badgesCompact.newValue);
       }
 
       if (touched) {
@@ -93,25 +98,33 @@ export default function HideJobsFilters() {
     return () => chromeApi.storage.onChanged.removeListener(handleStorage);
   }, [chromeApi]);
 
-  // Toggling a switch: write only the single <key>BadgeVisible (and legacy for dismissed)
+  // Toggling a filter switch
   const updateValue = (key, checked) => {
     setValues((prev) => ({ ...prev, [key]: checked }));
 
     if (chromeApi) {
+      // Control badge visibility
       chromeApi.storage.local.set({ [`${key}BadgeVisible`]: checked });
 
-      // legacy mirror for dismissed only
+      // Also control actual filter state (so jobs are hidden/restored)
+      chromeApi.storage.local.set({ [`${key}Hidden`]: checked });
+
       if (key === "dismissed") {
         chromeApi.storage.local.set({ dismissedBadgeVisible: checked });
       }
     }
 
-    // Notify content scripts (if anyone cares). We send only the new switch state snapshot.
     try {
       const detail = { ...values, [key]: checked };
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
       window.dispatchEvent(evt);
     } catch { }
+  };
+
+  // Toggling compact mode
+  const updateCompact = (checked) => {
+    setCompact(checked);
+    chromeApi?.storage?.local?.set?.({ badgesCompact: checked });
   };
 
   const rows = [
@@ -159,6 +172,18 @@ export default function HideJobsFilters() {
             </div>
           );
         })}
+
+        {/* NEW: Compact toggle row */}
+        <div className="flex items-center justify-between px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Text className="truncate">Compact</Text>
+          </div>
+          <Switch
+            size="small"
+            checked={!!compact}
+            onChange={updateCompact}
+          />
+        </div>
       </div>
     </div>
   );

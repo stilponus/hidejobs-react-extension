@@ -36,6 +36,7 @@ export default defineConfig({
         "content-hh.ru-scraper": path.resolve(__dirname, 'src/content-scripts/content-hh.ru-scraper.js'),
         "content-zarplata.ru-scraper": path.resolve(__dirname, 'src/content-scripts/content-zarplata.ru-scraper.js'),
         "content-linkedin-scraper": path.resolve(__dirname, 'src/content-scripts/content-linkedin-scraper.js'),
+        "content-total-counter": path.resolve(__dirname, "src/content-scripts/content-total-counter.js"),
         "content-dismissed": path.resolve(__dirname, "src/content-scripts/content-dismissed.js"),
         "content-promoted": path.resolve(__dirname, "src/content-scripts/content-promoted.js"),
         "content-applied": path.resolve(__dirname, "src/content-scripts/content-applied.js"),

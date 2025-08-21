@@ -72,6 +72,7 @@
         "https://*.linkedin.com/jobs/*"
       ],
       "js": [
+        "content-total-counter.js",
         "content-dismissed.js",
         "content-promoted.js",
         "content-applied.js",

@@ -1,37 +1,38 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Button } from "antd";
+import { Button, Tooltip } from "antd";
 
 /**
- * Ant Design BUTTON badge for any filter (count chip on the LEFT).
+ * Badge for any filter.
  *
  * Props:
  *  - storageKey: string (e.g., "dismissed", "promoted")
  *  - label: string ("Dismissed")
  *  - onColor: string (hex or friendly name; used when ON)
+ *  - compact?: boolean (when true → short pill that expands to the LEFT)
  *
  * chrome.storage.local keys used:
- *   "<storageKey>BadgeVisible" -> boolean (show/hide the button)
+ *   "<storageKey>BadgeVisible" -> boolean (show/hide the badge)
  *   "<storageKey>Hidden"       -> boolean (feature ON/OFF)
  *   "<storageKey>HiddenCount"  -> number  (count)
  *
- * Clicking the button toggles "<storageKey>Hidden".
+ * Clicking the badge toggles "<storageKey>Hidden".
  */
 
 // ===== Shared color theme (mirrors your old badge) =====
 const ENABLED_BG = "#01754f";     // old ON background
 const DISABLED_BG = "#666666";    // old OFF background (same for all)
-const CHIP_BG = "#f8fafd";        // pill behind count/OFF text
-const CHIP_TEXT = "#00000099";    // pill text color
+const CHIP_BG = "#f8fafd";        // inner white chip behind count/OFF text
+const CHIP_TEXT = "#00000099";    // chip text color
 const LABEL_TEXT_ON = "#ffffff";  // white text on ON green
 const LABEL_TEXT_OFF = "#ffffff"; // white text on OFF gray
-const OFF_OPACITY = 0.7;          // like the old 0.5–0.7 dim feel
+const OFF_OPACITY = 0.7;          // dim feel when OFF
 
-export default function FilterBadge({ storageKey, label, onColor }) {
+export default function FilterBadge({ storageKey, label, onColor, compact = false }) {
   const [visible, setVisible] = useState(false);
   const [isOn, setIsOn] = useState(false);
   const [count, setCount] = useState(0);
 
-  // Allow optional per-filter ON color; default to your global ENABLED_BG
+  // Allow optional per-filter ON color; default to global ENABLED_BG
   const resolvedOnColor = useMemo(() => {
     if (!onColor) return ENABLED_BG;
     const map = {
@@ -39,7 +40,7 @@ export default function FilterBadge({ storageKey, label, onColor }) {
       promoted: "#28507c",   // blue
       viewed: "#d40048",     // red
       applied: "#e7a33e",    // orange
-      companies: "#28507c",   // blue
+      companies: "#28507c",  // blue
     };
     return map[onColor] || onColor || ENABLED_BG;
   }, [onColor]);
@@ -81,23 +82,60 @@ export default function FilterBadge({ storageKey, label, onColor }) {
     chrome?.storage?.local?.set({ [`${storageKey}Hidden`]: !isOn });
   };
 
-  // LEFT pill (count/OFF)
+  // INNER white chip (number or OFF). This grows when 2+ digits / "OFF".
   const chipStyle = {
     height: 20,
-    minWidth: 20,              // makes 1-digit exactly 20×20 circle
-    padding: isOn ? "0 4px" : "0 6px", // lets it stretch for OFF / 2+ digits
-    borderRadius: 20,          // circle/pill
+    minWidth: 20,                    // makes 1-digit exactly 20×20 circle
+    padding: isOn ? "0 4px" : "0 6px", // stretch for OFF / 2+ digits
+    borderRadius: 25,
     fontSize: 14,
-    lineHeight: "20px",        // centers text vertically
+    lineHeight: "20px",
     background: CHIP_BG,
     color: CHIP_TEXT,
     fontWeight: 600,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    boxSizing: "border-box",
   };
 
-  // Button base styles (match your old look)
+  // ======= COMPACT VARIANT (short pill, expands to the LEFT) =======
+  if (compact) {
+    // Outer pill is right-aligned by the host (alignItems:flex-end).
+    // Inside we right-justify the chip so when it widens, the pill grows LEFT.
+    const outerStyle = {
+      height: 32,
+      borderRadius: "25px 0px 0px 25px",
+      background: isOn ? resolvedOnColor : DISABLED_BG,
+      opacity: isOn ? 1 : OFF_OPACITY,
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "flex-end", // keep chip at the RIGHT inside the pill
+      padding: "0px 25px 0px 8px", // little tail on the left, like your screenshot
+      boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+      cursor: "pointer",
+      userSelect: "none",
+      // width is 'auto'; right edge stays pinned by parent's alignItems:flex-end
+    };
+
+    // For accessibility we provide a title (hover) since label is hidden.
+    const title = `${label}: ${isOn ? `${count}` : "OFF"}`;
+
+    return (
+      <Tooltip title={label} placement="left">
+        <div
+          role="button"
+          aria-label={title}
+          onClick={handleToggle}
+          style={outerStyle}
+        >
+          <span style={chipStyle}>{isOn ? count : "OFF"}</span>
+        </div>
+      </Tooltip>
+    );
+  }
+
+  // ======= FULL (non-compact) VARIANT — your original button with label =======
   const baseBtnStyle = {
     display: "inline-flex",
     alignItems: "center",
@@ -135,10 +173,7 @@ export default function FilterBadge({ storageKey, label, onColor }) {
         ...baseBtnStyle,
       }}
     >
-      {/* LEFT count/OFF pill (always light like the old chip) */}
       <span style={chipStyle}>{isOn ? count : "OFF"}</span>
-
-      {/* Label */}
       <span style={{ fontSize: 16 }}>{label}</span>
     </Button>
   );
