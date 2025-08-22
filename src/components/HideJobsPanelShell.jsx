@@ -10,6 +10,7 @@ import {
   DoubleRightOutlined,
   CloseOutlined,
   ArrowsAltOutlined,
+  RetweetOutlined,
 } from "@ant-design/icons";
 
 import LogoNoBackground from "../assets/LogoNoBackground";
@@ -25,6 +26,8 @@ import HideJobsFilters from "./HideJobsFilters";
 import { EyeInvisibleFilled } from "@ant-design/icons";
 // NEW
 import CompaniesHideList from "./CompaniesHideList";
+// NEW: Reposted Panel
+import RepostedPanel from "./RepostedPanel";
 
 const HideJobsPanelShell = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -40,8 +43,8 @@ const HideJobsPanelShell = () => {
   useEffect(() => {
     chrome?.storage?.local?.get(["hidejobs_panel_view"], (result) => {
       const v = result?.hidejobs_panel_view;
-      // NEW: accept "companies" too
-      if (v === "filters" || v === "default" || v === "companies") setPanelView(v);
+      // Accept "filters", "default", "companies", "reposted"
+      if (v === "filters" || v === "default" || v === "companies" || v === "reposted") setPanelView(v);
     });
   }, []);
 
@@ -122,9 +125,11 @@ const HideJobsPanelShell = () => {
         const lastView =
           res?.hidejobs_panel_view === "filters"
             ? "filters"
-            : res?.hidejobs_panel_view === "companies" // NEW: keep "companies" too
+            : res?.hidejobs_panel_view === "companies"
               ? "companies"
-              : "default";
+              : res?.hidejobs_panel_view === "reposted"
+                ? "reposted"
+                : "default";
         setPanelView(lastView);
         setIsPanelVisible(true);
         chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
@@ -195,7 +200,6 @@ const HideJobsPanelShell = () => {
     window.addEventListener("hidejobs-panel-set-view", onSetView);
     return () => window.removeEventListener("hidejobs-panel-set-view", onSetView);
   }, []);
-
 
   const handleOpenJob = () => {
     if (trackedJobId) {
@@ -268,7 +272,22 @@ const HideJobsPanelShell = () => {
       },
     },
 
-    { type: "divider" }, // 👈 Divider BELOW Filters/Hidden Companies
+    // NEW: Reposted jobs entry
+    {
+      key: "reposted",
+      label: "Reposted jobs",
+      icon: <RetweetOutlined />,
+      onClick: () => {
+        setPanelView("reposted");
+        chrome?.storage?.local?.set({ hidejobs_panel_view: "reposted" });
+        setIsPanelVisible(true);
+        chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
+        setIsButtonVisible(false);
+        setDropdownOpen(false);
+      },
+    },
+
+    { type: "divider" }, // 👈 Divider BELOW Filters/Hidden Companies/Reposted
 
     {
       key: "home",
@@ -370,6 +389,7 @@ const HideJobsPanelShell = () => {
           }
         `}
       </style>
+
       <div
         ref={buttonRef}
         className={`button-wrapper fixed top-[70%] border-none z-[9999] flex items-center rounded-l-md shadow-xl ${isButtonVisible && !isPanelVisible ? "slide-visible" : ""}`}
@@ -382,6 +402,7 @@ const HideJobsPanelShell = () => {
         </div>
         <div className="tooltip">HideJobs</div>
       </div>
+
       <div
         ref={containerRef}
         className={`fixed top-[20px] right-[-400px] w-96 h-[90vh] rounded-xl shadow-2xl border-1 border-gray-200 bg-white z-[9999] flex flex-col overflow-hidden text-gray-800 font-sans transition-right duration-[0.4s] ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] user-select-none ${isPanelVisible ? "right-[20px]" : ""}`}
@@ -427,9 +448,11 @@ const HideJobsPanelShell = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 text-sm">
-          {/* NEW: "Hidden Companies" panel is always accessible (no login required) */}
+          {/* "Hidden Companies" and "Reposted" are always accessible (no login required) */}
           {panelView === "companies" ? (
             <CompaniesHideList />
+          ) : panelView === "reposted" ? (
+            <RepostedPanel />
           ) : isLoggedIn ? (
             panelView === "filters" ? <HideJobsFilters /> : content
           ) : (
