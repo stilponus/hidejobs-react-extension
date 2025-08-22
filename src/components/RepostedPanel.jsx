@@ -1,3 +1,4 @@
+// src/components/RepostedPanel.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { Button, Progress, Alert, Tooltip } from "antd";
 import {
@@ -126,12 +127,12 @@ function overlayReposted(card) {
     existing.style.display = "inline-block";
     return;
   }
-  
+
   const id =
     card.getAttribute("data-job-id") ||
     card.getAttribute("data-occludable-job-id") ||
     card.querySelector(".job-card-job-posting-card-wrapper[data-job-id]")?.getAttribute("data-job-id");
-  
+
   if (!id) return;
 
   const map = window.__repostedMapCache || {};
@@ -461,10 +462,10 @@ export default function RepostedPanel() {
     document.querySelectorAll(
       ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
     ).forEach(card => {
-      const id = card.getAttribute("data-job-id") || 
-                  card.getAttribute("data-occludable-job-id") ||
-                  card.querySelector(".job-card-job-posting-card-wrapper[data-job-id]")?.getAttribute("data-job-id");
-      
+      const id = card.getAttribute("data-job-id") ||
+        card.getAttribute("data-occludable-job-id") ||
+        card.querySelector(".job-card-job-posting-card-wrapper[data-job-id]")?.getAttribute("data-job-id");
+
       if (!id || seen.has(id) || !map[id]) return;
       seen.add(id);
 
@@ -542,7 +543,13 @@ export default function RepostedPanel() {
 
   const onAbort = () => {
     if (!scanning) return;
-    abortRef.current.aborted = true;
+    abortRef.current.aborted = true;  // tell the scanner to stop at the next check
+
+    // ⬇️ immediate UI reset so Scan becomes clickable again and progress resets
+    setScanning(false);
+    setFirstScanDone(false);
+    setProgress(0);
+    setFoundThisScan(0);
   };
 
   const onToggle = async () => {
@@ -564,21 +571,20 @@ export default function RepostedPanel() {
     if (repostedCount === 0 && !firstScanDone) {
       return hideReposted ? "Show" : "Hide";
     }
-    
+
     if (hideReposted) {
-      return blockedByOtherFilters 
-        ? "Show" 
+      return blockedByOtherFilters
+        ? "Show"
         : `Show (${repostedCount} hidden on this page)`;
     } else {
-      return blockedByOtherFilters 
-        ? "Hide" 
+      return blockedByOtherFilters
+        ? "Hide"
         : `Hide ${repostedCount} reposted job${repostedCount === 1 ? "" : "s"}`;
     }
   };
 
   const shouldShowToggleButton = repostedCount > 0 || (firstScanDone && blockedByOtherFilters);
   const shouldShowNoJobsMessage = firstScanDone && !scanning && repostedCount === 0 && !blockedByOtherFilters;
-  const shouldShowBlockedMessage = blockedByOtherFilters && repostedCount > 0;
 
   return (
     <div className="space-y-4">
@@ -592,6 +598,8 @@ export default function RepostedPanel() {
           type="warning"
           message="Open LinkedIn Jobs"
           description="This tool works on LinkedIn job search pages. Open a LinkedIn jobs list and run the scan."
+          // no built-in icon
+          showIcon={false}
           closable={!alertDismissed}
           onClose={onCloseAlert}
           style={{ display: alertDismissed ? 'none' : 'block' }}
@@ -614,16 +622,20 @@ export default function RepostedPanel() {
                 </ul>
               </div>
             }
+            // no built-in icon
+            showIcon={false}
             closable
             onClose={onCloseAlert}
           />
         )
       )}
 
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
+      {/* === BUTTON ROW (Scan + Cancel) → one row, 100% width, no horizontal scroll === */}
+      <div className="flex w-full gap-2">
+        <div className="flex-1">
           <Tooltip title="Scans LinkedIn job cards and marks 'Reposted' ones. Note: Scanning will mark all jobs as 'Viewed'">
             <Button
+              block
               type="primary"
               icon={<RetweetOutlined />}
               loading={scanning}
@@ -633,47 +645,40 @@ export default function RepostedPanel() {
               {scanning ? "Scanning…" : firstScanDone ? `Scan Completed (${foundThisScan > 0 ? foundThisScan + ' found' : 'none found'})` : "Scan for Reposted Jobs"}
             </Button>
           </Tooltip>
+        </div>
 
+        <div className="flex-1">
           <Tooltip title="Cancel the ongoing scan">
-            <Button icon={<StopOutlined />} danger onClick={onAbort} disabled={!scanning}>
+            <Button block icon={<StopOutlined />} danger onClick={onAbort} disabled={!scanning}>
               Cancel
             </Button>
           </Tooltip>
-
-          {shouldShowToggleButton && (
-            <Tooltip title={hideReposted ? "Show reposted jobs" : "Hide reposted jobs"}>
-              <Button
-                icon={hideReposted ? <EyeOutlined /> : <EyeInvisibleOutlined />}
-                onClick={onToggle}
-                disabled={scanning || !hostSupported}
-                type={hideReposted ? "default" : "primary"}
-                danger={!hideReposted}
-              >
-                {getToggleButtonText()}
-              </Button>
-            </Tooltip>
-          )}
         </div>
-
-        <Progress percent={Math.round(progress)} />
-
-        {shouldShowNoJobsMessage && (
-          <div className="text-center text-gray-500 italic">
-            No reposted jobs detected
-          </div>
-        )}
-
-        {shouldShowBlockedMessage && (
-          <Alert
-            type="warning"
-            message="Some reposted jobs are hidden by other filters"
-            description="Reposted jobs may be hidden by dismissed, applied, promoted, viewed, keyword, or company filters."
-            showIcon
-            icon={<ExclamationCircleOutlined />}
-            className="text-sm"
-          />
-        )}
       </div>
+
+      {/* === PROGRESS BAR === */}
+      <Progress percent={Math.round(progress)} />
+
+      {/* === HIDE/SHOW BUTTON → below progress, 100% width === */}
+      {shouldShowToggleButton && (
+        <Tooltip title={hideReposted ? "Show reposted jobs" : "Hide reposted jobs"}>
+          <Button
+            block
+            icon={hideReposted ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+            onClick={onToggle}
+            disabled={scanning || !hostSupported}
+            type={hideReposted ? "default" : "primary"}
+            danger={!hideReposted}
+          >
+            {getToggleButtonText()}
+          </Button>
+        </Tooltip>
+      )}
+
+      {/* No jobs after scan */}
+      {shouldShowNoJobsMessage && (
+        <div className="text-center text-gray-500 italic">No reposted jobs detected</div>
+      )}
     </div>
   );
 }

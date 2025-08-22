@@ -27,7 +27,7 @@ import { EyeInvisibleFilled } from "@ant-design/icons";
 // NEW
 import CompaniesHideList from "./CompaniesHideList";
 // NEW: Reposted Panel
-import RepostedPanel from "./RepostedPanel";
+import RepostedPanel from "./RepostedJobs/RepostedPanel";
 
 const HideJobsPanelShell = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
