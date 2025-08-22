@@ -84,7 +84,7 @@
 
     li.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
-           fill="#0a66c2" class="bi bi-eye-slash-fill" viewBox="0 0 16 16"
+           fill="#284e7a" class="bi bi-eye-slash-fill" viewBox="0 0 16 16"
            style="cursor:pointer; transition: fill .3s ease; position:absolute; left:${leftPosition}">
         <path d="m10.79 12.912-1.614-1.615 a3.5 3.5 0 0 1-4.474-4.474 l-2.06-2.06 C.938 6.278 0 8 0 8 s3 5.5 8 5.5 a7 7 0 0 0 2.79-.588 M5.21 3.088 A7 7 0 0 1 8 2.5 c5 0 8 5.5 8 5.5 s-.939 1.721 -2.641 3.238 l-2.062-2.062 a3.5 3.5 0 0 0 -4.474-4.474z"/>
         <path d="M5.525 7.646 a2.5 2.5 0 0 0 2.829 2.829 zm4.95.708-2.829-2.83 a2.5 2.5 0 0 1 2.829 2.829 zm3.171 6-12-12 .708-.708 12 12z"/>
@@ -122,14 +122,14 @@
 
     let t;
     li.addEventListener("mouseenter", () => {
-      li.querySelector("svg").style.fill = "#b10044";
+      li.querySelector("svg").style.fill = "#d30248";
       t = setTimeout(() => {
         hover.style.display = "block";
         setTimeout(() => (hover.style.opacity = "1"), 10);
       }, 700);
     });
     li.addEventListener("mouseleave", () => {
-      li.querySelector("svg").style.fill = "#0a66c2";
+      li.querySelector("svg").style.fill = "#284e7a";
       clearTimeout(t);
       hover.style.opacity = "0";
       setTimeout(() => (hover.style.display = "none"), 300);
@@ -395,7 +395,7 @@
     curtain.style.right = "-5%";
     curtain.style.width = "110%";
     curtain.style.height = "110%";
-    curtain.style.backgroundColor = "#b10044";
+    curtain.style.backgroundColor = "#d30248";
     curtain.style.borderRadius = "50px";
     curtain.style.transform = "translateX(100%)";
     curtain.style.transition = "transform .3s ease";
@@ -639,12 +639,12 @@
     isOn = false;
     hiddenCount = 0;
     countedIds.clear();
-    
+
     if (jobListObserver) {
       jobListObserver.disconnect();
       jobListObserver = null;
     }
-    
+
     if (slowLoadInterval) {
       clearInterval(slowLoadInterval);
       slowLoadInterval = null;
@@ -656,7 +656,7 @@
     if (message?.action === "REMOVE_FROM_HIDELIST" || message?.action === "UNHIDE_JOB_BY_COMPANY") {
       // Immediately unhide jobs from this specific company
       const companyName = message.companyName;
-      
+
       // Find and unhide jobs from this company right away
       const cards1 = document.querySelectorAll("li[data-occludable-job-id]");
       const cards2 = document.querySelectorAll("li[data-job-id]");
@@ -770,6 +770,16 @@
           injectCustomContainer();
           observeJobListContainer();
         }
+      } else {
+        restoreHidden();
+      }
+      updateCountStorage();
+    }
+
+    if ("hiddenCompanies" in changes) {
+      // When the list changes (added/removed), update the DOM immediately
+      if (isOn) {
+        hideByCompany();
       } else {
         restoreHidden();
       }

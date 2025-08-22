@@ -148,8 +148,8 @@ function isJobPage(href = location.href) {
           {/* Main side panel */}
           <HideJobsPanelShell />
 
-          {/* Badge stack (top-right etc.) */}
-          <BadgesHost />
+          {/* Badge stack (only on job pages) */}
+          {isJobPage(href) && <BadgesHost />}
 
           {/* Floating panels (same shadow root as badges) */}
           <KeywordFilterPanel visible={shouldShowKeywordPanel} />

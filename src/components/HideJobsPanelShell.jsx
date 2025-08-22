@@ -21,6 +21,11 @@ import HideJobsPanelSave from "./HideJobsPanelSave";
 import HideJobsPanelLoginRequired from "./HideJobsPanelLoginRequired";
 import HideJobsFilters from "./HideJobsFilters";
 
+// NEW
+import { EyeInvisibleFilled } from "@ant-design/icons";
+// NEW
+import CompaniesHideList from "./CompaniesHideList";
+
 const HideJobsPanelShell = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
@@ -35,7 +40,8 @@ const HideJobsPanelShell = () => {
   useEffect(() => {
     chrome?.storage?.local?.get(["hidejobs_panel_view"], (result) => {
       const v = result?.hidejobs_panel_view;
-      if (v === "filters" || v === "default") setPanelView(v);
+      // NEW: accept "companies" too
+      if (v === "filters" || v === "default" || v === "companies") setPanelView(v);
     });
   }, []);
 
@@ -113,7 +119,12 @@ const HideJobsPanelShell = () => {
 
       // Restore last view (default -> "default")
       chrome?.storage?.local?.get(["hidejobs_panel_view"], (res) => {
-        const lastView = res?.hidejobs_panel_view === "filters" ? "filters" : "default";
+        const lastView =
+          res?.hidejobs_panel_view === "filters"
+            ? "filters"
+            : res?.hidejobs_panel_view === "companies" // NEW: keep "companies" too
+              ? "companies"
+              : "default";
         setPanelView(lastView);
         setIsPanelVisible(true);
         chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
@@ -166,6 +177,25 @@ const HideJobsPanelShell = () => {
 
     setManualMode(noScraper);
   }, []);
+
+  // NEW: allow other components to force a view (e.g., companies list)
+  useEffect(() => {
+    const onSetView = (e) => {
+      const view = e?.detail?.view;
+      if (!view) return;
+
+      setPanelView(view);
+      chrome?.storage?.local?.set({ hidejobs_panel_view: view });
+
+      setIsPanelVisible(true);
+      chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
+      setIsButtonVisible(false);
+    };
+
+    window.addEventListener("hidejobs-panel-set-view", onSetView);
+    return () => window.removeEventListener("hidejobs-panel-set-view", onSetView);
+  }, []);
+
 
   const handleOpenJob = () => {
     if (trackedJobId) {
@@ -222,7 +252,23 @@ const HideJobsPanelShell = () => {
         setDropdownOpen(false);
       },
     },
-    { type: "divider" }, // 👈 Divider BELOW Filters
+
+    // NEW: Hidden Companies entry (below Filters)
+    {
+      key: "hidden-companies",
+      label: "Hidden Companies",
+      icon: <EyeInvisibleFilled />,
+      onClick: () => {
+        setPanelView("companies");
+        chrome?.storage?.local?.set({ hidejobs_panel_view: "companies" });
+        setIsPanelVisible(true);
+        chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
+        setIsButtonVisible(false);
+        setDropdownOpen(false);
+      },
+    },
+
+    { type: "divider" }, // 👈 Divider BELOW Filters/Hidden Companies
 
     {
       key: "home",
@@ -343,8 +389,8 @@ const HideJobsPanelShell = () => {
         {/* Sticky Header */}
         <div className="bg-hidejobs-50 shrink-0 sticky top-0 z-10 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Logo className="w-6 h-6" />
-            <span className="text-lg font-bold text-hidejobs-700">HideJobs</span>
+            <Logo className="w-8 h-8" />
+            <span className="text-xl font-bold text-hidejobs-700">HideJobs</span>
           </div>
           <div className="flex items-center gap-2">
             <Dropdown
@@ -381,7 +427,10 @@ const HideJobsPanelShell = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 text-sm">
-          {isLoggedIn ? (
+          {/* NEW: "Hidden Companies" panel is always accessible (no login required) */}
+          {panelView === "companies" ? (
+            <CompaniesHideList />
+          ) : isLoggedIn ? (
             panelView === "filters" ? <HideJobsFilters /> : content
           ) : (
             <HideJobsPanelLoginRequired />

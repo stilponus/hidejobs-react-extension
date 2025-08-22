@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Switch, Typography, Tooltip } from "antd";
-import { InfoCircleOutlined, CrownFilled } from "@ant-design/icons";
-
-import CompaniesHideList from "./CompaniesHideList";
+import { Switch, Typography, Tooltip, Button } from "antd";
+import {
+  InfoCircleOutlined,
+  CrownFilled,
+  EyeInvisibleFilled,
+} from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -26,7 +28,7 @@ const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map(k => [k, false]));
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -42,7 +44,7 @@ export default function HideJobsFilters() {
     const visibilityKeys = FILTER_KEYS.map((k) => `${k}BadgeVisible`);
 
     chromeApi.storage.local.get(
-      [...visibilityKeys, "dismissedBadgeVisible", "badgesCompact"],
+      [...visibilityKeys, "dismissedBadgeVisible", "badgesCompact"], // include compact
       (res) => {
         const next = { ...DEFAULT_STATE };
 
@@ -52,13 +54,8 @@ export default function HideJobsFilters() {
           }
         });
 
-        // Back-compat: mirror legacy dismissed flag
-        if (typeof res?.dismissedBadgeVisible === "boolean") {
-          next.dismissed = !!res.dismissedBadgeVisible;
-        }
-
         setValues(next);
-        setCompact(!!res?.badgesCompact);
+        setCompact(!!res?.badgesCompact); // set compact from storage
       }
     );
 
@@ -76,11 +73,6 @@ export default function HideJobsFilters() {
           touched = true;
         }
       });
-
-      if ("dismissedBadgeVisible" in changes) {
-        delta.dismissed = !!changes.dismissedBadgeVisible.newValue;
-        touched = true;
-      }
 
       if ("badgesCompact" in changes) {
         setCompact(!!changes.badgesCompact.newValue);
@@ -115,16 +107,15 @@ export default function HideJobsFilters() {
       const detail = { ...values, [key]: checked };
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
       window.dispatchEvent(evt);
-    } catch {}
+    } catch { }
   };
 
-  // Toggling compact mode
+  // Compact toggle
   const updateCompact = (checked) => {
     setCompact(checked);
     chromeApi?.storage?.local?.set?.({ badgesCompact: checked });
   };
 
-  // Rows (unchanged)
   const rows = [
     { key: "dismissed", label: "Dismissed" },
     { key: "promoted", label: "Promoted" },
@@ -139,63 +130,65 @@ export default function HideJobsFilters() {
     { key: "companies", label: "Companies", premium: true },
   ];
 
-  // Compute the first premium index once (for the section split)
-  const firstPremiumIndex = rows.findIndex(r => r.premium === true);
-  const hasPremium = firstPremiumIndex !== -1;
+  const goToCompaniesList = () => {
+    // Make sure panel switches view and stays open
+    chromeApi?.storage?.local?.set?.({ hidejobs_panel_view: "companies", hidejobs_panel_visible: true });
+    try {
+      const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "companies" } });
+      window.dispatchEvent(evt);
+    } catch { }
+  };
 
   return (
     <div className="space-y-4">
-
-      <div className="">
-        {/* Section: Free filters */}
-        <div className="px-3 py-2 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-          Free filters
+      {/* Header: title on the left, "Compact" + switch on the right */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
+        <div className="flex items-center gap-2">
+          <Text type="secondary" className="text-sm">Compact</Text>
+          <Switch
+            size="small"
+            checked={!!compact}
+            onChange={updateCompact}
+          />
         </div>
+      </div>
 
+      <div className="rounded-lg border border-gray-200">
         {rows.map((row, idx) => {
-          // Insert "Premium filters" header right before the first premium row
-          if (hasPremium && idx === firstPremiumIndex) {
-            return (
-              <React.Fragment key={`section-premium`}>
-                {/* Premium header */}
-                <div className="px-3 py-2 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                  Premium filters
-                </div>
+          const isLast = idx === rows.length - 1;
 
-                {/* Then render the premium row itself */}
-                <div
-                  key={row.key}
-                  className={`flex items-center justify-between px-3 py-2 ${
-                    idx === rows.length - 1 ? "" : "border-b border-gray-100"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
-                    <Text className="truncate">{row.label}</Text>
-                    {row.help ? (
-                      <Tooltip title="Info">
-                        <InfoCircleOutlined className="text-gray-400" />
-                      </Tooltip>
-                    ) : null}
-                  </div>
-
-                  <Switch
+          const rightControl =
+            row.key === "companies" ? (
+              <div className="flex items-center gap-2">
+                {/* Button to open Hidden Companies panel */}
+                <Tooltip title="Open Hidden Companies list">
+                  <Button
                     size="small"
-                    checked={!!values[row.key]}
-                    onChange={(checked) => updateValue(row.key, checked)}
-                  />
-                </div>
-              </React.Fragment>
+                    icon={<EyeInvisibleFilled />}
+                    onClick={goToCompaniesList}
+                  >
+                    List
+                  </Button>
+                </Tooltip>
+                <Switch
+                  size="small"
+                  checked={!!values[row.key]}
+                  onChange={(checked) => updateValue(row.key, checked)}
+                />
+              </div>
+            ) : (
+              <Switch
+                size="small"
+                checked={!!values[row.key]}
+                onChange={(checked) => updateValue(row.key, checked)}
+              />
             );
-          }
 
-          // Normal row render (free or premium after header already injected)
           return (
             <div
               key={row.key}
-              className={`flex items-center justify-between px-3 py-2 ${
-                idx === rows.length - 1 ? "" : "border-b border-gray-100"
-              }`}
+              className={`flex items-center justify-between px-3 py-2 ${isLast ? "" : "border-b border-gray-100"}`}
             >
               <div className="flex items-center gap-2 min-w-0">
                 {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
@@ -207,27 +200,10 @@ export default function HideJobsFilters() {
                 ) : null}
               </div>
 
-              <Switch
-                size="small"
-                checked={!!values[row.key]}
-                onChange={(checked) => updateValue(row.key, checked)}
-              />
+              {rightControl}
             </div>
           );
         })}
-
-        <CompaniesHideList />
-
-        {/* Section: Settings */}
-        <div className="px-3 py-2 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-          Settings
-        </div>
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <Text className="truncate">Compact</Text>
-          </div>
-          <Switch size="small" checked={!!compact} onChange={updateCompact} />
-        </div>
       </div>
     </div>
   );

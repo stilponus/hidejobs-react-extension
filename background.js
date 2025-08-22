@@ -93,3 +93,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+/* =========================================================================
+   5) Relay: content-panel -> content-scripts (same tab)
+   ========================================================================= */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.action === "UNHIDE_JOB_BY_COMPANY") {
+    if (sender?.tab?.id) {
+      chrome.tabs.sendMessage(sender.tab.id, message);
+    }
+    sendResponse?.({ ok: true });
+    return true;
+  }
+});
+
+/* =========================================================================
+   6) Internal messages (fetch top hidden companies)
+   ========================================================================= */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "get-top-hidden-companies") {
+    fetch("https://appgettopfivehiddencompanies-2j2kwatdfq-uc.a.run.app", { method: "GET" })
+      .then(async (res) => {
+        const json = await res.json().catch(() => []);
+        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        sendResponse({ success: true, data: json });
+      })
+      .catch((err) => {
+        console.error("❌ get-top-hidden-companies failed:", err);
+        sendResponse({ success: false, error: err?.message || String(err) });
+      });
+
+    // keep the channel open for async sendResponse
+    return true;
+  }
+});
