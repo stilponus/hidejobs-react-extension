@@ -1,6 +1,6 @@
 // src/components/RepostedJobs/RepostedPanel.jsx
 import React, { useEffect, useState } from "react";
-import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message } from "antd";
+import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message, Switch, Typography } from "antd";
 import {
   RetweetOutlined,
   EyeInvisibleOutlined,
@@ -29,7 +29,10 @@ import {
   REPOSTED_JOBS_DETAILS_KEY,
   REPOSTED_JOBS_KEY,
   HIDE_REPOSTED_STATE_KEY,
+  FEATURE_BADGE_KEY,
 } from "./repostedDom";
+
+const { Text } = Typography;
 
 export default function RepostedPanel() {
   const {
@@ -56,6 +59,9 @@ export default function RepostedPanel() {
 
   // 🔹 Track hidden companies so we can show ✔ icon instead of the + button
   const [hiddenCompanies, setHiddenCompanies] = useState([]);
+
+  // 🔹 Master feature toggle (synced with Filters panel via FEATURE_BADGE_KEY)
+  const [featureOn, setFeatureOn] = useState(true);
 
   const hostSupported = isSupportedHost();
 
@@ -95,6 +101,24 @@ export default function RepostedPanel() {
     setDetails(enriched);
   }
 
+  /** Hard remove all badges + unhide any rows we hid, and stop any further re-badging */
+  function removeBadgesAndUnhideNow() {
+    const cards = document.querySelectorAll(
+      ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
+    );
+    cards.forEach((card) => {
+      // remove badge
+      card.querySelectorAll(".my-reposted-badge").forEach((b) => b.remove());
+      // unhide rows if we hid them
+      const li = card.closest("li.scaffold-layout__list-item");
+      if (li) {
+        if (card.dataset.hiddenBy === "reposted") delete card.dataset.hiddenBy;
+        if (li.dataset.hiddenBy === "reposted") delete li.dataset.hiddenBy;
+        li.style.display = "";
+      }
+    });
+  }
+
   useEffect(() => {
     ensureBadgeStyles();
 
@@ -102,12 +126,19 @@ export default function RepostedPanel() {
       const dismissed = await loadAlertDismissed();
       setAlertDismissed(dismissed);
 
+      // Load master toggle (default ON unless explicitly false)
+      chrome?.storage?.local?.get([FEATURE_BADGE_KEY], (res) => {
+        const enabled = res?.[FEATURE_BADGE_KEY] !== false;
+        setFeatureOn(enabled);
+      });
+
       // Load hidden companies so we can render ✔ state immediately
       chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
         const list = Array.isArray(res?.hiddenCompanies) ? res.hiddenCompanies : [];
         setHiddenCompanies(list);
       });
 
+      // Apply badges only if feature enabled; helper will also guard
       await applyOverlaysFromLocalStorage();
       if (hideReposted) await toggleHideShowReposted(true);
       await updateCounts();
@@ -115,6 +146,7 @@ export default function RepostedPanel() {
       await refreshListFromStorageAndBackfill();
     })();
 
+    // Re-badge on list mutations (no-op if feature disabled due to guard)
     const list = document.querySelector("div.scaffold-layout__list");
     let mo;
     if (list) {
@@ -127,16 +159,36 @@ export default function RepostedPanel() {
       mo.observe(list, { childList: true, subtree: true });
     }
 
+    // Update list live from storage + react to master toggle cross-panel
     const onStorage = (changes, area) => {
       if (area !== "local") return;
+
       if (REPOSTED_JOBS_DETAILS_KEY in changes) {
         refreshListFromStorageAndBackfill();
       }
+
       if ("hiddenCompanies" in changes) {
         const next = Array.isArray(changes.hiddenCompanies?.newValue)
           ? changes.hiddenCompanies.newValue
           : [];
         setHiddenCompanies(next);
+      }
+
+      if (FEATURE_BADGE_KEY in changes) {
+        const enabled = changes[FEATURE_BADGE_KEY]?.newValue !== false;
+        setFeatureOn(enabled);
+        if (!enabled) {
+          // If someone turned it off from Filters panel → clear locally too
+          chrome?.storage?.local?.set({ [HIDE_REPOSTED_STATE_KEY]: "false" });
+          toggleHideShowReposted(false);
+          removeBadgesAndUnhideNow();
+        } else {
+          applyOverlaysFromLocalStorage();
+          chrome?.storage?.local?.get([HIDE_REPOSTED_STATE_KEY], (res) => {
+            const hideNow = res?.[HIDE_REPOSTED_STATE_KEY] === "true";
+            toggleHideShowReposted(hideNow);
+          });
+        }
       }
     };
     chrome?.storage?.onChanged?.addListener(onStorage);
@@ -145,6 +197,7 @@ export default function RepostedPanel() {
       if (mo) mo.disconnect();
       chrome?.storage?.onChanged?.removeListener(onStorage);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning, hideReposted]);
 
   const onCloseAlert = async () => {
@@ -163,21 +216,6 @@ export default function RepostedPanel() {
       ? "Hide"
       : `Hide ${repostedCount} reposted job${repostedCount === 1 ? "" : "s"}`;
   };
-
-  function removeBadgesAndUnhideNow() {
-    const cards = document.querySelectorAll(
-      ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
-    );
-    cards.forEach((card) => {
-      card.querySelectorAll(".my-reposted-badge").forEach((b) => b.remove());
-      const li = card.closest("li.scaffold-layout__list-item");
-      if (li) {
-        if (card.dataset.hiddenBy === "reposted") delete card.dataset.hiddenBy;
-        if (li.dataset.hiddenBy === "reposted") delete li.dataset.hiddenBy;
-        li.style.display = "";
-      }
-    });
-  }
 
   const handleDeleteJob = async (jobId, e) => {
     e?.stopPropagation?.();
@@ -385,14 +423,44 @@ export default function RepostedPanel() {
     },
   ];
 
+  // Handler for master feature switch in this panel
+  const onFeatureToggle = (checked) => {
+    setFeatureOn(checked);
+    if (!checked) {
+      // Turning OFF → persist, clear badges, show all rows, reset hide state
+      chrome?.storage?.local?.set({
+        [FEATURE_BADGE_KEY]: false,
+        [HIDE_REPOSTED_STATE_KEY]: "false",
+      });
+      toggleHideShowReposted(false);
+      removeBadgesAndUnhideNow();
+      messageApi.info("Reposted Jobs detection disabled.");
+    } else {
+      // Turning ON → persist, re-apply badges from saved map and keep hide/show state
+      chrome?.storage?.local?.set({ [FEATURE_BADGE_KEY]: true });
+      applyOverlaysFromLocalStorage();
+      chrome?.storage?.local?.get([HIDE_REPOSTED_STATE_KEY], (res) => {
+        const hideNow = res?.[HIDE_REPOSTED_STATE_KEY] === "true";
+        toggleHideShowReposted(hideNow);
+      });
+      messageApi.success("Reposted Jobs detection enabled.");
+    }
+  };
+
   return (
     <div className="space-y-4">
       {modalContextHolder}
       {messageContextHolder}
 
-      <div className="flex items-center gap-2">
-        <RetweetOutlined />
-        <h2 className="text-lg font-semibold text-hidejobs-700">Reposted jobs</h2>
+      {/* Header row: title left, master feature toggle right */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-hidejobs-700">Reposted jobs</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <Text type="secondary" className="text-sm">On/Off</Text>
+          <Switch size="small" checked={!!featureOn} onChange={onFeatureToggle} />
+        </div>
       </div>
 
       {!hostSupported ? (
@@ -430,6 +498,7 @@ export default function RepostedPanel() {
         )
       )}
 
+      {/* Scan + Cancel row */}
       <div className="flex w-full gap-2 min-w-0 mb-4">
         <div className="min-w-0 basis-0 grow-[2]">
           <Button
@@ -438,7 +507,7 @@ export default function RepostedPanel() {
             size="large"
             loading={scanning}
             onClick={() => { setUiReset(false); onScan(); }}
-            disabled={scanning || (!uiReset && firstScanDone) || !hostSupported}
+            disabled={!featureOn || scanning || (!uiReset && firstScanDone) || !hostSupported}
           >
             {scanning
               ? "Scanning…"
@@ -457,7 +526,7 @@ export default function RepostedPanel() {
               size="large"
               danger
               onClick={onAbort}
-              disabled={!scanning}
+              disabled={!featureOn || !scanning}
             >
               Cancel
             </Button>
@@ -465,10 +534,12 @@ export default function RepostedPanel() {
         </div>
       </div>
 
+      {/* Progress */}
       <div className="my-4">
         <Progress percent={uiReset ? 0 : Math.round(progress)} />
       </div>
 
+      {/* Hide/Show button */}
       {shouldShowToggleButton && (
         <div className="mb-4">
           <Button
@@ -476,7 +547,7 @@ export default function RepostedPanel() {
             size="large"
             icon={hideReposted ? <EyeOutlined /> : <EyeInvisibleOutlined />}
             onClick={onToggle}
-            disabled={scanning || !hostSupported}
+            disabled={!featureOn || scanning || !hostSupported}
             type={hideReposted ? "default" : "primary"}
             danger={!hideReposted}
           >
@@ -485,6 +556,7 @@ export default function RepostedPanel() {
         </div>
       )}
 
+      {/* Collapsible list only when we actually have items */}
       {hostSupported && details.length > 0 && (
         <Collapse className="bg-white" items={collapseItems} />
       )}

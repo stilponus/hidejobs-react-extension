@@ -3,12 +3,16 @@
 export const REPOSTED_JOBS_KEY = "myRepostedJobs"; // map: { [jobId]: true }
 export const REPOSTED_JOBS_DETAILS_KEY = "myRepostedJobsDetails"; // [{id, jobTitle, companyName, ...}]
 export const HIDE_REPOSTED_STATE_KEY = "myHideRepostedActive";
+
+// NOTE: keep this exact key in sync everywhere (Filters, inject, hooks)
 export const FEATURE_BADGE_KEY = "repostedGhtostBadgeVisible";
 export const ALERT_DISMISSED_KEY = "repostedPanelAlertDismissed";
 
 export function isSupportedHost() {
   return /linkedin\.com\/jobs\//i.test(String(location.href));
 }
+
+/* ------------------------------ Storage helpers ------------------------------ */
 
 export async function loadRepostedMap() {
   return new Promise((resolve) => {
@@ -56,7 +60,8 @@ export function dedupeRepostedDetails(arr) {
   return out;
 }
 
-/** Robust getters for Title / Company (as proven in your console test) */
+/* -------------------------- Title / Company getters ------------------------- */
+
 export function getCardTitle(card) {
   const cands = [
     ".job-card-job-posting-card-wrapper__title strong",
@@ -92,31 +97,36 @@ export function getCardCompany(card) {
   return null;
 }
 
-/** Insert or update one record by ID (keeps array bounded). */
-export async function upsertRepostedDetail(detail) {
-  // detail: { id, jobTitle, companyName, location?, jobUrl?, detectedAt? }
-  const existing = await loadRepostedDetails();
-  const idx = existing.findIndex((x) => x.id === detail.id);
-  const record = {
-    id: detail.id,
-    jobTitle: detail.jobTitle || null,
-    companyName: detail.companyName || null,
-    location: detail.location ?? null,
-    jobUrl: detail.jobUrl ?? null,
-    detectedAt: detail.detectedAt ?? Date.now(),
-  };
-  if (idx >= 0) {
-    existing[idx] = { ...existing[idx], ...record };
-  } else {
-    existing.unshift(record);
-  }
-  // hard bound
-  if (existing.length > 1000) existing.length = 1000;
+/* --------------------------- Feature toggle helper -------------------------- */
 
-  // one last dedupe pass (safety)
-  const deduped = dedupeRepostedDetails(existing);
-  await saveRepostedDetails(deduped);
+// Cached flag so we don’t thrash storage on every DOM churn.
+// Default = ON (historical behavior) unless explicitly set to false.
+function getCachedFeatureEnabled() {
+  if (typeof window !== "undefined" && ".__repostedFeatureOn" in window) {
+    return !!window.__repostedFeatureOn;
+  }
+  return true;
 }
+
+function setCachedFeatureEnabled(val) {
+  if (typeof window !== "undefined") {
+    window.__repostedFeatureOn = !!val;
+  }
+}
+
+/** Read the master toggle from storage (falls back to cached value). */
+export async function isRepostedFeatureEnabled() {
+  return new Promise((resolve) => {
+    chrome?.storage?.local?.get([FEATURE_BADGE_KEY], (d) => {
+      // explicitly false → disabled, anything else → enabled
+      const enabled = d?.[FEATURE_BADGE_KEY] !== false;
+      setCachedFeatureEnabled(enabled);
+      resolve(enabled);
+    });
+  });
+}
+
+/* ------------------------------- Alert helpers ------------------------------ */
 
 export async function loadAlertDismissed() {
   return new Promise((resolve) => {
@@ -130,7 +140,8 @@ export async function saveAlertDismissed() {
   await chrome?.storage?.local?.set({ [ALERT_DISMISSED_KEY]: true });
 }
 
-/* Badge + overlays */
+/* --------------------------------- Badging ---------------------------------- */
+
 let stylesInjected = false;
 export function ensureBadgeStyles() {
   if (stylesInjected) return;
@@ -147,6 +158,9 @@ export function ensureBadgeStyles() {
 }
 
 export function overlayReposted(card) {
+  // 🚫 Respect the master toggle at the DOM operation level too.
+  if (!getCachedFeatureEnabled()) return;
+
   const existing = card.querySelector(".my-reposted-badge");
   if (existing) {
     existing.style.display = "inline-block";
@@ -206,12 +220,52 @@ export async function toggleHideShowReposted(hide) {
   });
 }
 
+/**
+ * Apply badges from saved map to all visible cards.
+ * NOW respects the master feature toggle and exits early when OFF.
+ */
 export async function applyOverlaysFromLocalStorage() {
+  // ✅ Hard-stop if feature is OFF (check cache first, then storage to be safe)
+  if (!getCachedFeatureEnabled()) {
+    return;
+  }
+  // double-check storage in case cache is stale
+  const enabled = await isRepostedFeatureEnabled();
+  if (!enabled) return;
+
   const map = await loadRepostedMap();
   window.__repostedMapCache = map;
+
   document
     .querySelectorAll(
       ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
     )
     .forEach((card) => overlayReposted(card));
+}
+
+/* ------------------------------- Upsert detail ------------------------------ */
+
+export async function upsertRepostedDetail(detail) {
+  // detail: { id, jobTitle, companyName, location?, jobUrl?, detectedAt? }
+  const existing = await loadRepostedDetails();
+  const idx = existing.findIndex((x) => x.id === detail.id);
+  const record = {
+    id: detail.id,
+    jobTitle: detail.jobTitle || null,
+    companyName: detail.companyName || null,
+    location: detail.location ?? null,
+    jobUrl: detail.jobUrl ?? null,
+    detectedAt: detail.detectedAt ?? Date.now(),
+  };
+  if (idx >= 0) {
+    existing[idx] = { ...existing[idx], ...record };
+  } else {
+    existing.unshift(record);
+  }
+  // hard bound
+  if (existing.length > 1000) existing.length = 1000;
+
+  // one last dedupe pass (safety)
+  const deduped = dedupeRepostedDetails(existing);
+  await saveRepostedDetails(deduped);
 }

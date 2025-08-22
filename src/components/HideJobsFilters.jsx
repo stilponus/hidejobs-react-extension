@@ -1,3 +1,4 @@
+// src/components/HideJobsFilters.jsx   (your Filters panel)
 import React, { useEffect, useMemo, useState } from "react";
 import { Switch, Typography, Tooltip, Button } from "antd";
 import {
@@ -5,15 +6,20 @@ import {
   CrownFilled,
   EyeInvisibleFilled,
 } from "@ant-design/icons";
+import {
+  applyOverlaysFromLocalStorage,
+  toggleHideShowReposted,
+  HIDE_REPOSTED_STATE_KEY,
+  FEATURE_BADGE_KEY,          // ✅ import the feature key
+} from "./RepostedJobs/repostedDom";
 
 const { Text } = Typography;
 
-// ---- Single source of truth: <key>BadgeVisible (and legacy dismissedBadgeVisible) ----
 const FILTER_KEYS = [
   "dismissed",
   "promoted",
   "viewed",
-  "repostedGhost",
+  "repostedGhost",           // <- this switch should mirror FEATURE_BADGE_KEY
   "indeedSponsored",
   "glassdoorApplied",
   "indeedApplied",
@@ -32,19 +38,39 @@ function getChrome() {
   return null;
 }
 
+// Removes reposted badges immediately and unhides any rows we hid
+function clearRepostedBadgesFromDOM() {
+  const cards = document.querySelectorAll(
+    ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
+  );
+  cards.forEach((card) => {
+    card.querySelectorAll(".my-reposted-badge").forEach((b) => b.remove());
+    const li = card.closest("li.scaffold-layout__list-item");
+    if (li) {
+      if (card.dataset.hiddenBy === "reposted") delete card.dataset.hiddenBy;
+      if (li.dataset.hiddenBy === "reposted") delete li.dataset.hiddenBy;
+      li.style.display = "";
+    }
+  });
+}
+
 export default function HideJobsFilters() {
   const chromeApi = useMemo(getChrome, []);
   const [values, setValues] = useState(DEFAULT_STATE);
-  const [compact, setCompact] = useState(false); // Compact badges
+  const [compact, setCompact] = useState(false);
 
-  // Initial load: read per-flag visibility + legacy dismissed key
   useEffect(() => {
     if (!chromeApi) return;
 
     const visibilityKeys = FILTER_KEYS.map((k) => `${k}BadgeVisible`);
 
     chromeApi.storage.local.get(
-      [...visibilityKeys, "dismissedBadgeVisible", "badgesCompact"], // include compact
+      [
+        ...visibilityKeys,
+        "dismissedBadgeVisible",
+        "badgesCompact",
+        FEATURE_BADGE_KEY,                   // ✅ also load the feature key on init
+      ],
       (res) => {
         const next = { ...DEFAULT_STATE };
 
@@ -54,12 +80,16 @@ export default function HideJobsFilters() {
           }
         });
 
+        // ✅ Make FEATURE_BADGE_KEY the source of truth for the switch
+        // Default ON unless explicitly false
+        next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
+
         setValues(next);
-        setCompact(!!res?.badgesCompact); // set compact from storage
+        setCompact(!!res?.badgesCompact);
       }
     );
 
-    // Listen for storage changes (flags + compact)
+    // Listen for storage changes (flags + compact + FEATURE_BADGE_KEY)
     const handleStorage = (changes, area) => {
       if (area !== "local") return;
 
@@ -78,6 +108,12 @@ export default function HideJobsFilters() {
         setCompact(!!changes.badgesCompact.newValue);
       }
 
+      // ✅ Keep in sync with changes coming from the Reposted panel
+      if (FEATURE_BADGE_KEY in changes) {
+        delta.repostedGhost = changes[FEATURE_BADGE_KEY]?.newValue !== false;
+        touched = true;
+      }
+
       if (touched) {
         setValues((prev) => ({ ...prev, ...delta }));
       }
@@ -87,19 +123,30 @@ export default function HideJobsFilters() {
     return () => chromeApi.storage.onChanged.removeListener(handleStorage);
   }, [chromeApi]);
 
-  // Toggling a filter switch
   const updateValue = (key, checked) => {
     setValues((prev) => ({ ...prev, [key]: checked }));
 
     if (chromeApi) {
-      // Control badge visibility
       chromeApi.storage.local.set({ [`${key}BadgeVisible`]: checked });
-
-      // Also control actual filter state (so jobs are hidden/restored)
       chromeApi.storage.local.set({ [`${key}Hidden`]: checked });
 
       if (key === "dismissed") {
         chromeApi.storage.local.set({ dismissedBadgeVisible: checked });
+      }
+
+      if (key === "repostedGhost") {
+        // ✅ Persist the cross-panel feature toggle
+        chromeApi.storage.local.set({ [FEATURE_BADGE_KEY]: checked });
+
+        if (!checked) {
+          // OFF -> clear badges, show rows, reset hide
+          chromeApi.storage.local.set({ [HIDE_REPOSTED_STATE_KEY]: "false" });
+          toggleHideShowReposted(false);
+          clearRepostedBadgesFromDOM();
+        } else {
+          // ON -> re-apply badges
+          applyOverlaysFromLocalStorage();
+        }
       }
     }
 
@@ -110,7 +157,6 @@ export default function HideJobsFilters() {
     } catch { }
   };
 
-  // Compact toggle
   const updateCompact = (checked) => {
     setCompact(checked);
     chromeApi?.storage?.local?.set?.({ badgesCompact: checked });
@@ -120,7 +166,7 @@ export default function HideJobsFilters() {
     { key: "dismissed", label: "Dismissed" },
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
-    { key: "repostedGhost", label: "Reposted / Ghost Jobs", premium: true },
+    { key: "repostedGhost", label: "Reposted Jobs", premium: true }, // ← this switch mirrors FEATURE_BADGE_KEY
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true, help: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true, help: true },
@@ -131,7 +177,6 @@ export default function HideJobsFilters() {
   ];
 
   const goToCompaniesList = () => {
-    // Make sure panel switches view and stays open
     chromeApi?.storage?.local?.set?.({ hidejobs_panel_view: "companies", hidejobs_panel_visible: true });
     try {
       const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "companies" } });
@@ -141,16 +186,11 @@ export default function HideJobsFilters() {
 
   return (
     <div className="space-y-4">
-      {/* Header: title on the left, "Compact" + switch on the right */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
         <div className="flex items-center gap-2">
-          <Text type="secondary" className="text-sm">Compact</Text>
-          <Switch
-            size="small"
-            checked={!!compact}
-            onChange={updateCompact}
-          />
+          <Text type="secondary" className="text-sm">Compact badges</Text>
+          <Switch size="small" checked={!!compact} onChange={updateCompact} />
         </div>
       </div>
 
@@ -161,13 +201,8 @@ export default function HideJobsFilters() {
           const rightControl =
             row.key === "companies" ? (
               <div className="flex items-center gap-2">
-                {/* Button to open Hidden Companies panel */}
                 <Tooltip title="Open Hidden Companies list">
-                  <Button
-                    size="small"
-                    icon={<EyeInvisibleFilled />}
-                    onClick={goToCompaniesList}
-                  >
+                  <Button size="small" icon={<EyeInvisibleFilled />} onClick={goToCompaniesList}>
                     List
                   </Button>
                 </Tooltip>
@@ -199,7 +234,6 @@ export default function HideJobsFilters() {
                   </Tooltip>
                 ) : null}
               </div>
-
               {rightControl}
             </div>
           );
