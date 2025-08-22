@@ -1,17 +1,15 @@
 // src/components/RepostedJobs/repostedDom.js
 
-/* ============== Shared keys (exported) ============== */
-export const REPOSTED_JOBS_KEY = "myRepostedJobs";                // JSON map: { [jobId]: true }
+export const REPOSTED_JOBS_KEY = "myRepostedJobs"; // map: { [jobId]: true }
+export const REPOSTED_JOBS_DETAILS_KEY = "myRepostedJobsDetails"; // [{id, jobTitle, companyName, ...}]
 export const HIDE_REPOSTED_STATE_KEY = "myHideRepostedActive";
-export const FEATURE_BADGE_KEY = "repostedGhtostBadgeVisible";    // left for parity (default ON)
+export const FEATURE_BADGE_KEY = "repostedGhtostBadgeVisible";
 export const ALERT_DISMISSED_KEY = "repostedPanelAlertDismissed";
 
-/* ============== Host check ============== */
 export function isSupportedHost() {
   return /linkedin\.com\/jobs\//i.test(String(location.href));
 }
 
-/* ============== Storage helpers (exported) ============== */
 export async function loadRepostedMap() {
   return new Promise((resolve) => {
     chrome?.storage?.local?.get(REPOSTED_JOBS_KEY, (d) => {
@@ -28,6 +26,98 @@ export async function saveRepostedMap(map) {
   await chrome?.storage?.local?.set({ [REPOSTED_JOBS_KEY]: JSON.stringify(map) });
 }
 
+export async function loadRepostedDetails() {
+  return new Promise((resolve) => {
+    chrome?.storage?.local?.get(REPOSTED_JOBS_DETAILS_KEY, (d) => {
+      try {
+        const arr = d?.[REPOSTED_JOBS_DETAILS_KEY];
+        resolve(Array.isArray(arr) ? arr : []);
+      } catch {
+        resolve([]);
+      }
+    });
+  });
+}
+
+export async function saveRepostedDetails(arr) {
+  await chrome?.storage?.local?.set({ [REPOSTED_JOBS_DETAILS_KEY]: arr });
+}
+
+/** Deduplicate by "id" (keep first occurrence). Returns the deduped array. */
+export function dedupeRepostedDetails(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    if (!item?.id) continue;
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
+/** Robust getters for Title / Company (as proven in your console test) */
+export function getCardTitle(card) {
+  const cands = [
+    ".job-card-job-posting-card-wrapper__title strong",
+    ".job-card-list__title--link strong",
+    ".job-card-container__link span[aria-hidden='true']",
+    ".job-card-container__link",
+    "a.job-card-list__title--link",
+  ];
+  for (const sel of cands) {
+    const el = card.querySelector(sel);
+    const t = el?.textContent?.trim();
+    if (t) return t;
+  }
+  return null;
+}
+
+export function getCardCompany(card) {
+  const cands = [
+    ".job-card-job-posting-card-wrapper__subtitle div[dir='ltr']",
+    ".artdeco-entity-lockup__subtitle div[dir='ltr']",
+    ".job-card-container__primary-description div[dir='ltr']",
+    ".job-card-container__primary-description",
+    ".artdeco-entity-lockup__subtitle",
+    "a.job-card-container__company-name",
+    ".job-card-container__company-name",
+    "[data-test-reusables-job-card__company-name]",
+  ];
+  for (const sel of cands) {
+    const el = card.querySelector(sel);
+    const txt = el?.textContent?.trim();
+    if (txt) return txt.replace(/\s+/g, " ");
+  }
+  return null;
+}
+
+/** Insert or update one record by ID (keeps array bounded). */
+export async function upsertRepostedDetail(detail) {
+  // detail: { id, jobTitle, companyName, location?, jobUrl?, detectedAt? }
+  const existing = await loadRepostedDetails();
+  const idx = existing.findIndex((x) => x.id === detail.id);
+  const record = {
+    id: detail.id,
+    jobTitle: detail.jobTitle || null,
+    companyName: detail.companyName || null,
+    location: detail.location ?? null,
+    jobUrl: detail.jobUrl ?? null,
+    detectedAt: detail.detectedAt ?? Date.now(),
+  };
+  if (idx >= 0) {
+    existing[idx] = { ...existing[idx], ...record };
+  } else {
+    existing.unshift(record);
+  }
+  // hard bound
+  if (existing.length > 1000) existing.length = 1000;
+
+  // one last dedupe pass (safety)
+  const deduped = dedupeRepostedDetails(existing);
+  await saveRepostedDetails(deduped);
+}
+
 export async function loadAlertDismissed() {
   return new Promise((resolve) => {
     chrome?.storage?.local?.get(ALERT_DISMISSED_KEY, (d) => {
@@ -40,32 +130,7 @@ export async function saveAlertDismissed() {
   await chrome?.storage?.local?.set({ [ALERT_DISMISSED_KEY]: true });
 }
 
-/* ============== Small DOM helpers (internal) ============== */
-function smoothToggleJob(li, hide) {
-  const isHidden = getComputedStyle(li).display === "none";
-  if ((hide && isHidden) || (!hide && !isHidden)) return;
-  li.style.display = hide ? "none" : "";
-}
-
-export function isHiddenByOtherFilters(card) {
-  const li = card.closest("li.scaffold-layout__list-item");
-  return (
-    card.dataset.hiddenBy === "dismissed" ||
-    card.dataset.hiddenBy === "applied" ||
-    card.dataset.hiddenBy === "promoted" ||
-    card.dataset.hiddenBy === "viewed" ||
-    card.dataset.hiddenBy === "keyword" ||
-    card.dataset.hiddenBy === "company" ||
-    li?.dataset.hiddenBy === "dismissed" ||
-    li?.dataset.hiddenBy === "applied" ||
-    li?.dataset.hiddenBy === "promoted" ||
-    li?.dataset.hiddenBy === "viewed" ||
-    li?.dataset.hiddenBy === "keyword" ||
-    li?.dataset.hiddenBy === "company"
-  );
-}
-
-/* ============== Badge styles + overlay (exported) ============== */
+/* Badge + overlays */
 let stylesInjected = false;
 export function ensureBadgeStyles() {
   if (stylesInjected) return;
@@ -87,82 +152,60 @@ export function overlayReposted(card) {
     existing.style.display = "inline-block";
     return;
   }
-
   const id =
     card.getAttribute("data-job-id") ||
     card.getAttribute("data-occludable-job-id") ||
     card
       .querySelector(".job-card-job-posting-card-wrapper[data-job-id]")
       ?.getAttribute("data-job-id");
-
   if (!id) return;
 
   const map = window.__repostedMapCache || {};
   if (!map[id]) return;
 
   card.style.position = "relative";
-  if (isHiddenByOtherFilters(card)) return;
-
   const badge = document.createElement("div");
   badge.className = "my-reposted-badge";
   badge.textContent = "Reposted";
   card.appendChild(badge);
 }
 
-/* ============== Hide/Show (exported via a single toggle) ============== */
-async function hideAllReposted() {
-  const cards = document.querySelectorAll(
-    ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
+export function isHiddenByOtherFilters(card) {
+  const li = card.closest("li.scaffold-layout__list-item");
+  return (
+    card.dataset.hiddenBy === "dismissed" ||
+    card.dataset.hiddenBy === "applied" ||
+    card.dataset.hiddenBy === "promoted" ||
+    card.dataset.hiddenBy === "viewed" ||
+    card.dataset.hiddenBy === "keyword" ||
+    card.dataset.hiddenBy === "company" ||
+    li?.dataset.hiddenBy === "dismissed" ||
+    li?.dataset.hiddenBy === "applied" ||
+    li?.dataset.hiddenBy === "promoted" ||
+    li?.dataset.hiddenBy === "viewed" ||
+    li?.dataset.hiddenBy === "keyword" ||
+    li?.dataset.hiddenBy === "company"
   );
-  const map = window.__repostedMapCache || {};
-  cards.forEach((card) => {
-    const id =
-      card.getAttribute("data-job-id") ||
-      card.getAttribute("data-occludable-job-id") ||
-      card
-        .querySelector(".job-card-job-posting-card-wrapper[data-job-id]")
-        ?.getAttribute("data-job-id");
-    const li = card.closest("li.scaffold-layout__list-item");
-    if (id && map[id] && li) {
-      smoothToggleJob(li, true);
-      card.dataset.hiddenBy = "reposted";
-    }
-  });
-}
-
-async function showAllReposted() {
-  const cards = document.querySelectorAll(
-    ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
-  );
-  const map = window.__repostedMapCache || {};
-  cards.forEach((card) => {
-    const id =
-      card.getAttribute("data-job-id") ||
-      card.getAttribute("data-occludable-job-id") ||
-      card
-        .querySelector(".job-card-job-posting-card-wrapper[data-job-id]")
-        ?.getAttribute("data-job-id");
-    const li = card.closest("li.scaffold-layout__list-item");
-    if (!li) return;
-
-    const hiddenBySelf = card.dataset.hiddenBy;
-    const hiddenByParent = li?.dataset.hiddenBy;
-    const blockedByOtherFilters =
-      ["dismissed", "applied", "promoted", "viewed", "keyword", "company"].includes(hiddenBySelf) ||
-      ["dismissed", "applied", "promoted", "viewed", "keyword", "company"].includes(hiddenByParent);
-
-    if (id && map[id] && !blockedByOtherFilters) {
-      smoothToggleJob(li, false);
-    }
-  });
 }
 
 export async function toggleHideShowReposted(hide) {
-  if (hide) return hideAllReposted();
-  return showAllReposted();
+  const cards = document.querySelectorAll(
+    ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
+  );
+  const map = window.__repostedMapCache || {};
+  cards.forEach((card) => {
+    const id =
+      card.getAttribute("data-job-id") ||
+      card.getAttribute("data-occludable-job-id") ||
+      card
+        .querySelector(".job-card-job-posting-card-wrapper[data-job-id]")
+        ?.getAttribute("data-job-id");
+    const li = card.closest("li.scaffold-layout__list-item");
+    if (!li || !id || !map[id]) return;
+    li.style.display = hide ? "none" : "";
+  });
 }
 
-/* ============== Apply overlays from storage (exported) ============== */
 export async function applyOverlaysFromLocalStorage() {
   const map = await loadRepostedMap();
   window.__repostedMapCache = map;

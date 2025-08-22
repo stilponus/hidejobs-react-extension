@@ -63,18 +63,22 @@ function isJobPage(href = location.href) {
     useEffect(() => {
       chrome?.storage?.local?.get(
         [
-          "userTextBadgeVisible", "userText",                    // keywords (current + legacy)
-          "filterByHoursBadgeVisible", "filterByHours"           // hours (current + legacy)
+          "userTextBadgeVisible",
+          "userText", // keywords (current + legacy)
+          "filterByHoursBadgeVisible",
+          "filterByHours", // hours (current + legacy)
         ],
         (res) => {
-          const kw = typeof res?.userTextBadgeVisible === "boolean"
-            ? !!res.userTextBadgeVisible
-            : !!res?.userText;
+          const kw =
+            typeof res?.userTextBadgeVisible === "boolean"
+              ? !!res.userTextBadgeVisible
+              : !!res?.userText;
           setShowKeywords(kw);
 
-          const hrs = typeof res?.filterByHoursBadgeVisible === "boolean"
-            ? !!res.filterByHoursBadgeVisible
-            : !!res?.filterByHours;
+          const hrs =
+            typeof res?.filterByHoursBadgeVisible === "boolean"
+              ? !!res.filterByHoursBadgeVisible
+              : !!res?.filterByHours;
           setShowFilterByHours(hrs);
         }
       );
@@ -121,6 +125,7 @@ function isJobPage(href = location.href) {
           theme={{
             token: {
               colorPrimary: "#28507c",
+              colorSuccess: "#009966",
               fontFamily: "Inter, sans-serif",
               zIndexPopupBase: 10000,
             },
@@ -144,6 +149,12 @@ function isJobPage(href = location.href) {
               },
               Tag: {
                 borderRadiusSM: 20,
+              },
+              Progress: {
+                defaultColor: "#28507c",
+              },
+              Collapse: {
+                contentPadding: "0px 0px",  // ✅ remove content padding
               },
             },
           }}
