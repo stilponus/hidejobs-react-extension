@@ -1,5 +1,4 @@
-// src/components/RepostedJobs/useRepostedScanner.js
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   applyOverlaysFromLocalStorage,
   toggleHideShowReposted,
@@ -152,6 +151,30 @@ export default function useRepostedScanner() {
     scanningRef.current = scanning;
   }, [scanning]);
 
+  // NEW: Force reset function that completely resets all state
+  const forceReset = useCallback(async () => {
+    // Stop any ongoing scan
+    abortRef.current.aborted = true;
+    runIdRef.current += 1;
+
+    // Clear global cache
+    window.__repostedMapCache = {};
+
+    // Reset all state variables
+    setScanning(false);
+    setFirstScanDone(false);
+    setProgress(0);
+    setFoundThisScan(0);
+    setRepostedCount(0);
+    setBlockedByOtherFilters(false);
+
+    // Reset hide state to false
+    setHideReposted(false);
+
+    // Update counts with fresh data
+    await updateCounts();
+  }, []);
+
   // init hide/show state from storage
   useEffect(() => {
     (async () => {
@@ -213,7 +236,7 @@ export default function useRepostedScanner() {
     let debounceTimer = null;
 
     const resetScanUI = async () => {
-      // Don’t reset mid-scan
+      // Don't reset mid-scan
       if (scanningRef.current) return;
 
       // Stop any lingering run callbacks
@@ -243,7 +266,7 @@ export default function useRepostedScanner() {
           prevIds = currIds;
           await resetScanUI();
         } else {
-          // No “true” page/list change → still ensure badges stay applied
+          // No "true" page/list change → still ensure badges stay applied
           await applyOverlaysFromLocalStorage();
           if (hideReposted) await toggleHideShowReposted(true);
           await updateCounts();
@@ -265,6 +288,18 @@ export default function useRepostedScanner() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hideReposted]);
+
+  // NEW: Listen for reset events from the panel component
+  useEffect(() => {
+    const handleResetEvent = async (event) => {
+      await forceReset();
+    };
+
+    window.addEventListener("reset-reposted-scan-ui", handleResetEvent);
+    return () => {
+      window.removeEventListener("reset-reposted-scan-ui", handleResetEvent);
+    };
+  }, [forceReset]);
 
   async function scanForRepostedJobs({ onProgress, onFound, shouldAbort }) {
     const t0 = performance.now();
@@ -541,5 +576,6 @@ export default function useRepostedScanner() {
     onAbort,
     onToggle,
     updateCounts,
+    forceReset, // NEW: Expose the reset function
   };
 }

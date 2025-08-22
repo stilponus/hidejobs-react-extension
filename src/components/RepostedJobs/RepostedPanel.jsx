@@ -1,4 +1,4 @@
-// src/components/RepostedJobs/RepostedPanel.jsx
+
 import React, { useEffect, useState } from "react";
 import { Button, Progress, Alert, Collapse, List, Tooltip, Modal } from "antd";
 import {
@@ -8,6 +8,8 @@ import {
   StopOutlined,
   ExclamationCircleOutlined,
   DeleteOutlined,
+  CloseOutlined,
+  PlusSquareOutlined
 } from "@ant-design/icons";
 
 import useRepostedScanner from "./useRepostedScanner";
@@ -41,12 +43,14 @@ export default function RepostedPanel() {
     onAbort,
     onToggle,
     updateCounts,
+    forceReset, // NEW: expose the reset function
   } = useRepostedScanner();
 
   const [alertDismissed, setAlertDismissed] = useState(false);
   const [details, setDetails] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false); // prevent multiple confirms
   const [modal, modalContextHolder] = Modal.useModal(); // render modal in this tree
+  const [uiReset, setUiReset] = useState(false);
 
   const hostSupported = isSupportedHost();
 
@@ -165,12 +169,89 @@ export default function RepostedPanel() {
     });
   }
 
+  // Handle individual job deletion
+  const handleDeleteJob = async (jobId, e) => {
+    e?.stopPropagation?.(); // don't toggle Collapse
+
+    try {
+      // 1) Remove from details storage
+      const currentDetails = await loadRepostedDetails();
+      const updatedDetails = currentDetails.filter(item => item.id !== jobId);
+      await saveRepostedDetails(updatedDetails);
+
+      // 2) Remove from reposted map storage
+      const currentMap = await chrome.storage.local.get([REPOSTED_JOBS_KEY]);
+      const mapData = JSON.parse(currentMap[REPOSTED_JOBS_KEY] || "{}");
+      delete mapData[jobId];
+      await chrome.storage.local.set({
+        [REPOSTED_JOBS_KEY]: JSON.stringify(mapData)
+      });
+
+      // 3) Update global cache
+      if (window.__repostedMapCache) {
+        delete window.__repostedMapCache[jobId];
+      }
+
+      // 4) Remove badge from DOM immediately
+      const cardSelectors = [
+        `[data-occludable-job-id="${jobId}"]`,
+        `[data-job-id="${jobId}"]`,
+        `.job-card-job-posting-card-wrapper[data-job-id="${jobId}"]`
+      ];
+
+      cardSelectors.forEach(selector => {
+        const card = document.querySelector(selector);
+        if (card) {
+          // Remove the badge
+          card.querySelectorAll(".my-reposted-badge").forEach(badge => badge.remove());
+
+          // Unhide the row if it was hidden
+          const li = card.closest("li.scaffold-layout__list-item");
+          if (li) {
+            if (card.dataset.hiddenBy === "reposted") delete card.dataset.hiddenBy;
+            if (li.dataset.hiddenBy === "reposted") delete li.dataset.hiddenBy;
+            li.style.display = "";
+          }
+        }
+      });
+
+      // 5) Update local state
+      const newDetails = updatedDetails;
+      setDetails(newDetails);
+
+      // 6) Update counts
+      await updateCounts();
+
+      // 7) If this was the last job, treat it like "clear all"
+      if (newDetails.length === 0) {
+        await forceReset();
+        setUiReset(true);
+
+        // Also make sure hide state is off
+        await chrome.storage.local.set({
+          [HIDE_REPOSTED_STATE_KEY]: "false"
+        });
+        await toggleHideShowReposted(false);
+      }
+
+    } catch (error) {
+      console.error('Error deleting individual job:', error);
+    }
+  };
+
+  const handleHideCompany = async (companyName, e) => {
+    e?.stopPropagation?.();
+    if (!companyName) return;
+    // TODO: add real “hide all by company” logic + persistence.
+    console.log("Hide all from company:", companyName);
+  };
+
   const shouldShowToggleButton =
     repostedCount > 0 || (firstScanDone && blockedByOtherFilters);
 
   // —— Clear all: storage + DOM + state + scan UI reset ——
   const handleClearAll = (e) => {
-    e?.stopPropagation?.(); // don’t toggle Collapse
+    e?.stopPropagation?.(); // don't toggle Collapse
 
     if (confirmOpen) return; // prevent multiple modals
     setConfirmOpen(true);
@@ -179,41 +260,52 @@ export default function RepostedPanel() {
       icon: null,
       title: "Clear all reposted jobs?",
       content:
-        "This will clear the saved reposted jobs, remove all badges from the page, and reset the scan.",
+        "This will remove all detected reposted jobs. You can scan again anytime to find new ones.",
       okText: "Clear",
       cancelText: "Cancel",
       okButtonProps: { type: "primary", danger: true },
       getContainer: () =>
-        document.querySelector("hidejobs-panel-ui").shadowRoot.querySelector("div"), // render inside panel
+        document.querySelector("hidejobs-panel-ui").shadowRoot.querySelector("div"),
       zIndex: 10002,
       maskClosable: true,
       keyboard: true,
       onOk: async () => {
-        // 1) Clear storage and reset cached map
-        await chrome.storage.local.set({
-          [REPOSTED_JOBS_DETAILS_KEY]: [],
-          [REPOSTED_JOBS_KEY]: JSON.stringify({}),
-          [HIDE_REPOSTED_STATE_KEY]: "false",
-        });
-        window.__repostedMapCache = {};
+        try {
+          // 1) Clear storage and reset cached map completely
+          await chrome.storage.local.set({
+            [REPOSTED_JOBS_DETAILS_KEY]: [],
+            [REPOSTED_JOBS_KEY]: JSON.stringify({}),
+            [HIDE_REPOSTED_STATE_KEY]: "false",
+          });
 
-        // 2) Make sure "hide" is off, and no future overlays will be added
-        await toggleHideShowReposted(false);
+          // Clear all global caches completely
+          window.__repostedMapCache = {};
 
-        // 3) Remove any existing badges + unhide rows immediately
-        removeBadgesAndUnhideNow();
+          // 2) Make sure "hide" is off, and no future overlays will be added
+          await toggleHideShowReposted(false);
 
-        // 4) Re-run overlay pass with empty map (won't add anything)
-        await applyOverlaysFromLocalStorage();
+          // 3) Remove any existing badges + unhide rows immediately
+          removeBadgesAndUnhideNow();
 
-        // 5) Reset local list & counts
-        setDetails([]);
-        await updateCounts();
+          // 4) Re-run overlay pass with empty map (won't add anything)
+          await applyOverlaysFromLocalStorage();
 
-        // 6) Let the hook/UI know to reset the scan state if it listens for it
-        window.dispatchEvent(new CustomEvent("reset-reposted-scan-ui"));
+          // 5) Reset local list & counts
+          setDetails([]);
+          await updateCounts();
 
-        setConfirmOpen(false);
+          // 6) CRITICAL: Force reset the scanner hook
+          await forceReset(); // NEW: Use the exposed reset function
+
+          // 7) Reset UI state to allow re-scanning
+          setUiReset(true);
+
+          setConfirmOpen(false);
+
+        } catch (error) {
+          console.error('Error clearing reposted jobs:', error);
+          setConfirmOpen(false);
+        }
       },
       onCancel: () => setConfirmOpen(false),
     });
@@ -240,12 +332,34 @@ export default function RepostedPanel() {
             dataSource={details}
             renderItem={(item) => (
               <List.Item>
-                <div className="w-full">
-                  <div className="font-medium leading-tight">
-                    {item.jobTitle || "Untitled role"}
+                <div className="w-full flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium leading-tight truncate">
+                      {item.jobTitle || "Untitled role"}
+                    </div>
+                    <div className="text-gray-600 text-xs leading-tight truncate">
+                      {item.companyName || "—"}
+                    </div>
                   </div>
-                  <div className="text-gray-600 text-xs leading-tight">
-                    {item.companyName || "—"}
+                  <div className="flex items-center flex-shrink-0">
+                    <Tooltip title="Hide all from this Company">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<PlusSquareOutlined />}
+                        onClick={(e) => handleHideCompany(item.companyName, e)}
+                        className="ml-2 text-gray-400 hover:text-blue-600"
+                      />
+                    </Tooltip>
+                    <Tooltip title="Remove this job">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<CloseOutlined />}
+                        onClick={(e) => handleDeleteJob(item.id, e)}
+                        className="ml-2 text-gray-400 hover:text-red-500"
+                      />
+                    </Tooltip>
                   </div>
                 </div>
               </List.Item>
@@ -309,15 +423,17 @@ export default function RepostedPanel() {
             type="primary"
             size="large"
             loading={scanning}
-            onClick={onScan}
+            onClick={() => { setUiReset(false); onScan(); }}
             // 🔒 Disabled after a successful scan until you clear/reset or list changes
-            disabled={scanning || firstScanDone || !hostSupported}
+            disabled={scanning || (!uiReset && firstScanDone) || !hostSupported}
           >
             {scanning
               ? "Scanning…"
-              : firstScanDone
-                ? `Scan Completed (${foundThisScan > 0 ? `${foundThisScan} found` : "none"})`
-                : "Scan for Reposted Jobs"}
+              : uiReset
+                ? "Scan for Reposted Jobs"
+                : firstScanDone
+                  ? `Scan Completed (${foundThisScan > 0 ? `${foundThisScan} found` : "none"})`
+                  : "Scan for Reposted Jobs"}
           </Button>
         </div>
         <div className="min-w-0 basis-0 grow">
@@ -338,7 +454,7 @@ export default function RepostedPanel() {
 
       {/* Progress */}
       <div className="my-4">
-        <Progress percent={Math.round(progress)} />
+        <Progress percent={uiReset ? 0 : Math.round(progress)} />
       </div>
 
       {/* Hide/Show button */}
