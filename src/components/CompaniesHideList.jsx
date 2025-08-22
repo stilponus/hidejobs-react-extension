@@ -3,7 +3,7 @@ import { Button, Input, message, Divider, Skeleton, Tooltip } from "antd";
 import {
   ArrowLeftOutlined,
   ClearOutlined,
-  CloseCircleOutlined,
+  CloseOutlined,
   PlusOutlined,
   EyeInvisibleFilled,
 } from "@ant-design/icons";
@@ -117,6 +117,9 @@ export default function CompaniesHideList() {
           action: "UNHIDE_JOB_BY_COMPANY",
           companyName: name,
         });
+
+        // ✅ show confirmation message
+        messageApi.success(`Removed "${name}" from hidden companies.`);
       });
     });
   };
@@ -198,11 +201,10 @@ export default function CompaniesHideList() {
               <span className="truncate">{c}</span>
               <Button
                 type="text"
-                shape="circle"
                 size="small"
                 title="Unhide"
                 aria-label={`Unhide ${c}`}
-                icon={<CloseCircleOutlined />}
+                icon={<CloseOutlined />}
                 onClick={() => removeOne(c)}
               />
             </li>

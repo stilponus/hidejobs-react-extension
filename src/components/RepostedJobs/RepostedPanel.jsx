@@ -242,10 +242,7 @@ export default function RepostedPanel() {
       chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
         const list = Array.isArray(res?.hiddenCompanies) ? res.hiddenCompanies : [];
         const exists = list.some((x) => norm(x) === norm(name));
-        if (exists) {
-          resolve();
-          return;
-        }
+        if (exists) { resolve(); return; }
         const updated = [...list, name];
         chrome?.storage?.local?.set({ hiddenCompanies: updated }, () => resolve());
       });
@@ -257,30 +254,9 @@ export default function RepostedPanel() {
       return [...prev, name];
     });
 
-    const cards = document.querySelectorAll(
-      ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
-    );
-    cards.forEach((card) => {
-      const cName = getCardCompany(card);
-      if (norm(cName) === norm(name)) {
-        const li = card.closest("li.scaffold-layout__list-item");
-        if (li) {
-          card.dataset.hiddenBy = "company";
-          li.dataset.hiddenBy = "company";
-          li.style.display = "none";
-        }
-      }
-    });
-
-    try {
-      chrome?.runtime?.sendMessage?.({
-        action: "HIDE_JOB_BY_COMPANY",
-        companyName: name,
-      });
-    } catch { }
-
+    // NOTE: Do NOT hide now — company filter controls actual hiding elsewhere.
     await updateCounts();
-    messageApi.success(`All jobs from "${name}" hidden`);
+    messageApi.success(`"${name}" saved to hidden companies`);
   };
 
   const shouldShowToggleButton =
@@ -349,7 +325,7 @@ export default function RepostedPanel() {
         </Tooltip>
       ),
       children: (
-        <div className="max-h-80 overflow-auto pr-1">
+        <div className="max-h-80 overflow-auto">
           <List
             size="small"
             dataSource={details}
@@ -370,11 +346,16 @@ export default function RepostedPanel() {
                     </div>
                     <div className="flex items-center flex-shrink-0">
                       {isHiddenCompany ? (
-                        <Tooltip title="Company added to hidden list">
-                          <CheckSquareOutlined className="ml-2" style={{ color: "#16a34a" }} />
+                        <Tooltip title="Company saved to hidden list">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<CheckSquareOutlined style={{ color: "#16a34a" }} />}
+                            className="ml-2"
+                          />
                         </Tooltip>
                       ) : (
-                        <Tooltip title="Hide all from this Company">
+                        <Tooltip title="Add this company to hidden list">
                           <Button
                             type="text"
                             size="small"
@@ -390,7 +371,7 @@ export default function RepostedPanel() {
                           size="small"
                           icon={<CloseOutlined />}
                           onClick={(e) => handleDeleteJob(item.id, e)}
-                          className="ml-2 text-gray-400 hover:text-red-500"
+                          className="ml-2 text-gray-400 hover:text-hidejobs-red-500"
                         />
                       </Tooltip>
                     </div>
@@ -435,7 +416,7 @@ export default function RepostedPanel() {
                   <li>Click <strong>Scan for Reposted Jobs</strong>.</li>
                   <li>We open each visible card, match title/company, then detect <em>"Reposted … ago"</em>.</li>
                   <li>Use <strong>Hide</strong>/<strong>Show</strong> to toggle reposted jobs in the list.</li>
-                  <li className="text-red-500">
+                  <li className="text-hidejobs-red-500">
                     <ExclamationCircleOutlined className="mr-1" />
                     <strong>Re-scan</strong> when you revisit the page.
                   </li>
