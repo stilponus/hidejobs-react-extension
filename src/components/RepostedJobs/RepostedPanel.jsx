@@ -1,6 +1,6 @@
-
+// src/components/RepostedJobs/RepostedPanel.jsx
 import React, { useEffect, useState } from "react";
-import { Button, Progress, Alert, Collapse, List, Tooltip, Modal } from "antd";
+import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message } from "antd";
 import {
   RetweetOutlined,
   EyeInvisibleOutlined,
@@ -9,7 +9,8 @@ import {
   ExclamationCircleOutlined,
   DeleteOutlined,
   CloseOutlined,
-  PlusSquareOutlined
+  PlusSquareOutlined,
+  CheckSquareOutlined,
 } from "@ant-design/icons";
 
 import useRepostedScanner from "./useRepostedScanner";
@@ -43,14 +44,18 @@ export default function RepostedPanel() {
     onAbort,
     onToggle,
     updateCounts,
-    forceReset, // NEW: expose the reset function
+    forceReset,
   } = useRepostedScanner();
 
   const [alertDismissed, setAlertDismissed] = useState(false);
   const [details, setDetails] = useState([]);
-  const [confirmOpen, setConfirmOpen] = useState(false); // prevent multiple confirms
-  const [modal, modalContextHolder] = Modal.useModal(); // render modal in this tree
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [modal, modalContextHolder] = Modal.useModal();
   const [uiReset, setUiReset] = useState(false);
+  const [messageApi, messageContextHolder] = message.useMessage();
+
+  // 🔹 Track hidden companies so we can show ✔ icon instead of the + button
+  const [hiddenCompanies, setHiddenCompanies] = useState([]);
 
   const hostSupported = isSupportedHost();
 
@@ -58,7 +63,6 @@ export default function RepostedPanel() {
     let arr = await loadRepostedDetails();
     const deduped = dedupeRepostedDetails(arr);
 
-    // Backfill missing fields from DOM if available
     const enriched = deduped.map((item) => {
       if (item?.companyName && item?.jobTitle) return item;
 
@@ -98,6 +102,12 @@ export default function RepostedPanel() {
       const dismissed = await loadAlertDismissed();
       setAlertDismissed(dismissed);
 
+      // Load hidden companies so we can render ✔ state immediately
+      chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
+        const list = Array.isArray(res?.hiddenCompanies) ? res.hiddenCompanies : [];
+        setHiddenCompanies(list);
+      });
+
       await applyOverlaysFromLocalStorage();
       if (hideReposted) await toggleHideShowReposted(true);
       await updateCounts();
@@ -105,7 +115,6 @@ export default function RepostedPanel() {
       await refreshListFromStorageAndBackfill();
     })();
 
-    // Re-badge on list mutations
     const list = document.querySelector("div.scaffold-layout__list");
     let mo;
     if (list) {
@@ -118,11 +127,16 @@ export default function RepostedPanel() {
       mo.observe(list, { childList: true, subtree: true });
     }
 
-    // Update list live from storage
     const onStorage = (changes, area) => {
       if (area !== "local") return;
       if (REPOSTED_JOBS_DETAILS_KEY in changes) {
         refreshListFromStorageAndBackfill();
+      }
+      if ("hiddenCompanies" in changes) {
+        const next = Array.isArray(changes.hiddenCompanies?.newValue)
+          ? changes.hiddenCompanies.newValue
+          : [];
+        setHiddenCompanies(next);
       }
     };
     chrome?.storage?.onChanged?.addListener(onStorage);
@@ -131,7 +145,6 @@ export default function RepostedPanel() {
       if (mo) mo.disconnect();
       chrome?.storage?.onChanged?.removeListener(onStorage);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning, hideReposted]);
 
   const onCloseAlert = async () => {
@@ -151,15 +164,12 @@ export default function RepostedPanel() {
       : `Hide ${repostedCount} reposted job${repostedCount === 1 ? "" : "s"}`;
   };
 
-  /** Hard remove all badges + unhide any rows we hid, and stop any further re-badging */
   function removeBadgesAndUnhideNow() {
     const cards = document.querySelectorAll(
       ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
     );
     cards.forEach((card) => {
-      // remove badge
       card.querySelectorAll(".my-reposted-badge").forEach((b) => b.remove());
-      // unhide rows if we hid them
       const li = card.closest("li.scaffold-layout__list-item");
       if (li) {
         if (card.dataset.hiddenBy === "reposted") delete card.dataset.hiddenBy;
@@ -169,17 +179,13 @@ export default function RepostedPanel() {
     });
   }
 
-  // Handle individual job deletion
   const handleDeleteJob = async (jobId, e) => {
-    e?.stopPropagation?.(); // don't toggle Collapse
-
+    e?.stopPropagation?.();
     try {
-      // 1) Remove from details storage
       const currentDetails = await loadRepostedDetails();
       const updatedDetails = currentDetails.filter(item => item.id !== jobId);
       await saveRepostedDetails(updatedDetails);
 
-      // 2) Remove from reposted map storage
       const currentMap = await chrome.storage.local.get([REPOSTED_JOBS_KEY]);
       const mapData = JSON.parse(currentMap[REPOSTED_JOBS_KEY] || "{}");
       delete mapData[jobId];
@@ -187,25 +193,19 @@ export default function RepostedPanel() {
         [REPOSTED_JOBS_KEY]: JSON.stringify(mapData)
       });
 
-      // 3) Update global cache
       if (window.__repostedMapCache) {
         delete window.__repostedMapCache[jobId];
       }
 
-      // 4) Remove badge from DOM immediately
       const cardSelectors = [
         `[data-occludable-job-id="${jobId}"]`,
         `[data-job-id="${jobId}"]`,
         `.job-card-job-posting-card-wrapper[data-job-id="${jobId}"]`
       ];
-
       cardSelectors.forEach(selector => {
         const card = document.querySelector(selector);
         if (card) {
-          // Remove the badge
           card.querySelectorAll(".my-reposted-badge").forEach(badge => badge.remove());
-
-          // Unhide the row if it was hidden
           const li = card.closest("li.scaffold-layout__list-item");
           if (li) {
             if (card.dataset.hiddenBy === "reposted") delete card.dataset.hiddenBy;
@@ -215,25 +215,17 @@ export default function RepostedPanel() {
         }
       });
 
-      // 5) Update local state
-      const newDetails = updatedDetails;
-      setDetails(newDetails);
-
-      // 6) Update counts
+      setDetails(updatedDetails);
       await updateCounts();
 
-      // 7) If this was the last job, treat it like "clear all"
-      if (newDetails.length === 0) {
+      if (updatedDetails.length === 0) {
         await forceReset();
         setUiReset(true);
-
-        // Also make sure hide state is off
-        await chrome.storage.local.set({
-          [HIDE_REPOSTED_STATE_KEY]: "false"
-        });
+        await chrome.storage.local.set({ [HIDE_REPOSTED_STATE_KEY]: "false" });
         await toggleHideShowReposted(false);
       }
 
+      messageApi.success("Job removed from the list");
     } catch (error) {
       console.error('Error deleting individual job:', error);
     }
@@ -241,19 +233,62 @@ export default function RepostedPanel() {
 
   const handleHideCompany = async (companyName, e) => {
     e?.stopPropagation?.();
-    if (!companyName) return;
-    // TODO: add real “hide all by company” logic + persistence.
-    console.log("Hide all from company:", companyName);
+    const norm = (s) => (s || "").trim().toLowerCase();
+    const name = (companyName || "").trim();
+    if (!name) return;
+
+    // Save to hiddenCompanies (avoid dupes, case-insensitive)
+    await new Promise((resolve) => {
+      chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
+        const list = Array.isArray(res?.hiddenCompanies) ? res.hiddenCompanies : [];
+        const exists = list.some((x) => norm(x) === norm(name));
+        if (exists) {
+          resolve();
+          return;
+        }
+        const updated = [...list, name];
+        chrome?.storage?.local?.set({ hiddenCompanies: updated }, () => resolve());
+      });
+    });
+
+    // Update local state immediately so UI flips to ✔
+    setHiddenCompanies((prev) => {
+      if (prev.some((x) => norm(x) === norm(name))) return prev;
+      return [...prev, name];
+    });
+
+    const cards = document.querySelectorAll(
+      ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
+    );
+    cards.forEach((card) => {
+      const cName = getCardCompany(card);
+      if (norm(cName) === norm(name)) {
+        const li = card.closest("li.scaffold-layout__list-item");
+        if (li) {
+          card.dataset.hiddenBy = "company";
+          li.dataset.hiddenBy = "company";
+          li.style.display = "none";
+        }
+      }
+    });
+
+    try {
+      chrome?.runtime?.sendMessage?.({
+        action: "HIDE_JOB_BY_COMPANY",
+        companyName: name,
+      });
+    } catch { }
+
+    await updateCounts();
+    messageApi.success(`All jobs from "${name}" hidden`);
   };
 
   const shouldShowToggleButton =
-    repostedCount > 0 || (firstScanDone && blockedByOtherFilters);
+    repostedCount > 0 || blockedByOtherFilters;
 
-  // —— Clear all: storage + DOM + state + scan UI reset ——
   const handleClearAll = (e) => {
-    e?.stopPropagation?.(); // don't toggle Collapse
-
-    if (confirmOpen) return; // prevent multiple modals
+    e?.stopPropagation?.();
+    if (confirmOpen) return;
     setConfirmOpen(true);
 
     modal.confirm({
@@ -271,37 +306,25 @@ export default function RepostedPanel() {
       keyboard: true,
       onOk: async () => {
         try {
-          // 1) Clear storage and reset cached map completely
           await chrome.storage.local.set({
             [REPOSTED_JOBS_DETAILS_KEY]: [],
             [REPOSTED_JOBS_KEY]: JSON.stringify({}),
             [HIDE_REPOSTED_STATE_KEY]: "false",
           });
 
-          // Clear all global caches completely
           window.__repostedMapCache = {};
 
-          // 2) Make sure "hide" is off, and no future overlays will be added
           await toggleHideShowReposted(false);
-
-          // 3) Remove any existing badges + unhide rows immediately
           removeBadgesAndUnhideNow();
-
-          // 4) Re-run overlay pass with empty map (won't add anything)
           await applyOverlaysFromLocalStorage();
 
-          // 5) Reset local list & counts
           setDetails([]);
           await updateCounts();
-
-          // 6) CRITICAL: Force reset the scanner hook
-          await forceReset(); // NEW: Use the exposed reset function
-
-          // 7) Reset UI state to allow re-scanning
+          await forceReset();
           setUiReset(true);
 
           setConfirmOpen(false);
-
+          messageApi.success("All reposted jobs cleared");
         } catch (error) {
           console.error('Error clearing reposted jobs:', error);
           setConfirmOpen(false);
@@ -330,40 +353,51 @@ export default function RepostedPanel() {
           <List
             size="small"
             dataSource={details}
-            renderItem={(item) => (
-              <List.Item>
-                <div className="w-full flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium leading-tight truncate">
-                      {item.jobTitle || "Untitled role"}
+            renderItem={(item) => {
+              const isHiddenCompany = hiddenCompanies.some(
+                (c) => (c || "").toLowerCase() === (item.companyName || "").toLowerCase()
+              );
+              return (
+                <List.Item>
+                  <div className="w-full flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium leading-tight truncate">
+                        {item.jobTitle || "Untitled role"}
+                      </div>
+                      <div className="text-gray-600 text-xs leading-tight truncate">
+                        {item.companyName || "—"}
+                      </div>
                     </div>
-                    <div className="text-gray-600 text-xs leading-tight truncate">
-                      {item.companyName || "—"}
+                    <div className="flex items-center flex-shrink-0">
+                      {isHiddenCompany ? (
+                        <Tooltip title="Company added to hidden list">
+                          <CheckSquareOutlined className="ml-2" style={{ color: "#16a34a" }} />
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title="Hide all from this Company">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<PlusSquareOutlined />}
+                            onClick={(e) => handleHideCompany(item.companyName, e)}
+                            className="ml-2 text-gray-400 hover:text-blue-600"
+                          />
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Remove this job">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CloseOutlined />}
+                          onClick={(e) => handleDeleteJob(item.id, e)}
+                          className="ml-2 text-gray-400 hover:text-red-500"
+                        />
+                      </Tooltip>
                     </div>
                   </div>
-                  <div className="flex items-center flex-shrink-0">
-                    <Tooltip title="Hide all from this Company">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<PlusSquareOutlined />}
-                        onClick={(e) => handleHideCompany(item.companyName, e)}
-                        className="ml-2 text-gray-400 hover:text-blue-600"
-                      />
-                    </Tooltip>
-                    <Tooltip title="Remove this job">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<CloseOutlined />}
-                        onClick={(e) => handleDeleteJob(item.id, e)}
-                        className="ml-2 text-gray-400 hover:text-red-500"
-                      />
-                    </Tooltip>
-                  </div>
-                </div>
-              </List.Item>
-            )}
+                </List.Item>
+              );
+            }}
           />
         </div>
       ),
@@ -372,8 +406,8 @@ export default function RepostedPanel() {
 
   return (
     <div className="space-y-4">
-      {/* mount point for useModal() so confirms render within the panel */}
       {modalContextHolder}
+      {messageContextHolder}
 
       <div className="flex items-center gap-2">
         <RetweetOutlined />
@@ -415,7 +449,6 @@ export default function RepostedPanel() {
         )
       )}
 
-      {/* Scan + Cancel row (75/25), no overflow */}
       <div className="flex w-full gap-2 min-w-0 mb-4">
         <div className="min-w-0 basis-0 grow-[2]">
           <Button
@@ -424,7 +457,6 @@ export default function RepostedPanel() {
             size="large"
             loading={scanning}
             onClick={() => { setUiReset(false); onScan(); }}
-            // 🔒 Disabled after a successful scan until you clear/reset or list changes
             disabled={scanning || (!uiReset && firstScanDone) || !hostSupported}
           >
             {scanning
@@ -452,12 +484,10 @@ export default function RepostedPanel() {
         </div>
       </div>
 
-      {/* Progress */}
       <div className="my-4">
         <Progress percent={uiReset ? 0 : Math.round(progress)} />
       </div>
 
-      {/* Hide/Show button */}
       {shouldShowToggleButton && (
         <div className="mb-4">
           <Button
@@ -474,7 +504,6 @@ export default function RepostedPanel() {
         </div>
       )}
 
-      {/* Collapsible list only when we actually have items */}
       {hostSupported && details.length > 0 && (
         <Collapse className="bg-white" items={collapseItems} />
       )}
