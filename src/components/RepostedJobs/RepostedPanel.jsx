@@ -142,12 +142,12 @@ export default function RepostedPanel() {
       )}
 
       {/* === BUTTON ROW (Scan + Cancel) → 75/25, 100% width, no overflow === */}
-      <div className="flex w-full gap-2 min-w-0">
-        <div className="min-w-0 basis-0 grow-[3]">
-          <Tooltip title="Scans LinkedIn job cards and marks 'Reposted' ones. Note: Scanning will mark all jobs as 'Viewed'">
+      <div className="flex w-full gap-2 min-w-0 mb-4">
+        <div className="min-w-0 basis-0 grow-[2]">
             <Button
               block
               type="primary"
+              size="large"
               icon={<RetweetOutlined />}
               loading={scanning}
               onClick={onScan}
@@ -159,7 +159,6 @@ export default function RepostedPanel() {
                   ? `Scan Completed (${foundThisScan > 0 ? foundThisScan + " found" : "none found"})`
                   : "Scan for Reposted Jobs"}
             </Button>
-          </Tooltip>
         </div>
 
         <div className="min-w-0 basis-0 grow">
@@ -167,6 +166,7 @@ export default function RepostedPanel() {
             <Button
               block
               icon={<StopOutlined />}
+              size="large"
               danger
               onClick={onAbort}
               disabled={!scanning}
@@ -182,20 +182,19 @@ export default function RepostedPanel() {
 
       {/* === HIDE/SHOW BUTTON → below progress, 100% width === */}
       {shouldShowToggleButton && (
-        <Tooltip
-          title={hideReposted ? "Show reposted jobs" : "Hide reposted jobs"}
-        >
-          <Button
-            block
-            icon={hideReposted ? <EyeOutlined /> : <EyeInvisibleOutlined />}
-            onClick={onToggle}
-            disabled={scanning || !hostSupported}
-            type={hideReposted ? "default" : "primary"}
-            danger={!hideReposted}
-          >
-            {getToggleButtonText()}
-          </Button>
-        </Tooltip>
+        <div className="mt-4">
+            <Button
+              block
+              size="large"
+              icon={hideReposted ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+              onClick={onToggle}
+              disabled={scanning || !hostSupported}
+              type={hideReposted ? "default" : "primary"}
+              danger={!hideReposted}
+            >
+              {getToggleButtonText()}
+            </Button>
+        </div>
       )}
 
       {/* No jobs after scan */}

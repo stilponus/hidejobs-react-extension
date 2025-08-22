@@ -129,6 +129,9 @@ function isJobPage(href = location.href) {
                 colorPrimary: "#28507c",
                 colorPrimaryHover: "#306399",
                 colorPrimaryActive: "#233b57",
+                colorError: "#d40048",
+                colorErrorHover: "#b3003b",
+                colorErrorActive: "#990032",
               },
               Dropdown: {
                 colorBgElevated: "#ffffff",

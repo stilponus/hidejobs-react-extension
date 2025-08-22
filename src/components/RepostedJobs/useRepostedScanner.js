@@ -11,6 +11,7 @@ import {
   REPOSTED_JOBS_KEY,
   HIDE_REPOSTED_STATE_KEY,
   FEATURE_BADGE_KEY,
+  overlayReposted,
 } from "./repostedDom";
 
 /* ------------------------------- Settings ----------------------------- */
@@ -63,9 +64,9 @@ async function scrollToEnd() {
     attempts++;
     const cur = document.querySelectorAll(
       "[data-occludable-job-id]," +
-        "[data-job-id]," +
-        ".job-card-job-posting-card-wrapper[data-job-id]," +
-        ".job-card-container[data-job-id]"
+      "[data-job-id]," +
+      ".job-card-job-posting-card-wrapper[data-job-id]," +
+      ".job-card-container[data-job-id]"
     ).length;
 
     if (cur <= oldCount) break;
@@ -143,9 +144,9 @@ export default function useRepostedScanner() {
     const allCards = Array.from(
       document.querySelectorAll(
         "[data-occludable-job-id]," +
-          "[data-job-id]," +
-          ".job-card-job-posting-card-wrapper[data-job-id]," +
-          ".job-card-container[data-job-id]"
+        "[data-job-id]," +
+        ".job-card-job-posting-card-wrapper[data-job-id]," +
+        ".job-card-container[data-job-id]"
       )
     ).filter((card) => {
       if (card.closest(".continuous-discovery-modules")) return false;
@@ -195,11 +196,9 @@ export default function useRepostedScanner() {
           continue;
         }
 
-        // known → overlay & continue
+        // known → overlay & continue (live badge)
         if (map[id]) {
-          // lazy overlay; DOM import avoided here to keep scanner pure
-          const evt = new CustomEvent("repostedMapKnown", { detail: { id, card: li } });
-          window.dispatchEvent(evt);
+          overlayReposted(li);
           onProgress((processed / allCards.length) * 100);
           continue;
         }
@@ -262,9 +261,8 @@ export default function useRepostedScanner() {
           await saveRepostedMap(map);
           window.__repostedMapCache = map;
 
-          // notify overlay listener to append badge
-          const evt = new CustomEvent("repostedMapKnown", { detail: { id, card: li } });
-          window.dispatchEvent(evt);
+          // live badge now
+          overlayReposted(li);
 
           // optional telemetry
           const jobTitle =
