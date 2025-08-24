@@ -25,3 +25,26 @@
   --color-hidejobs-red-900: #970441;
   --color-hidejobs-red-950: #55001e;
 }
+
+.ai-button {
+  background-color: #feb700 !important;
+  border-color: #feb700 !important;
+  color: #333333 !important;
+  font-weight: 500;
+}
+
+.ai-button:hover,
+.ai-button:focus {
+  background-color: #f8cc2e !important;
+  border-color: #f8cc2e !important;
+  color: #333333 !important;
+}
+
+.ai-button:disabled,
+.ai-button[disabled] {
+  background-color: #f5f5f5 !important;
+  border-color: #d9d9d9 !important;
+  color: #bfbfbf !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}

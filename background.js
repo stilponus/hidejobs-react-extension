@@ -1,5 +1,41 @@
 console.log("🧠 Background loaded");
 
+// Kick a silent subscription refresh on background load
+refreshSubscriptionStatusFromServer();
+
+/* =========================================================================
+   0) Helper: fetch and cache subscription status for current user
+   ========================================================================= */
+async function refreshSubscriptionStatusFromServer() {
+  try {
+    const { user } = await chrome.storage.local.get(["user"]);
+    const uid = user?.uid;
+    if (!uid) {
+      await chrome.storage.local.set({ subscriptionStatus: "unknown", isSubscribed: false });
+      return { status: "unknown", isSubscribed: false };
+    }
+
+    const resp = await fetch(`https://appgetsubscription-2j2kwatdfq-uc.a.run.app?uid=${encodeURIComponent(uid)}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+
+    const status = typeof data?.status === "string" ? data.status : "unknown";
+    const isSubscribed = !!data?.isActive;
+
+    await chrome.storage.local.set({ subscriptionStatus: status, isSubscribed });
+    return { status, isSubscribed };
+  } catch (err) {
+    console.error("❌ refreshSubscriptionStatusFromServer failed:", err);
+    await chrome.storage.local.set({ subscriptionStatus: "unknown", isSubscribed: false });
+    return { status: "unknown", isSubscribed: false };
+  }
+}
+
 /* =========================================================================
    1) Browser action: toggle panel in the active tab
    ========================================================================= */
@@ -39,6 +75,10 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
         return;
       }
       console.log("💾 User successfully saved to extension local storage");
+
+      // Also refresh subscription status for this user
+      refreshSubscriptionStatusFromServer().catch(() => { });
+
       sendResponse({ success: true, reason: "stored" });
     });
 
@@ -125,5 +165,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // keep the channel open for async sendResponse
     return true;
+  }
+});
+
+/* =========================================================================
+   7) Internal messages (get/refresh subscription)
+   ========================================================================= */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "get-subscription-status") {
+    (async () => {
+      // First return cached quickly, then refresh if asked
+      const cached = await chrome.storage.local.get(["subscriptionStatus", "isSubscribed"]);
+      const out = {
+        status: cached?.subscriptionStatus ?? "unknown",
+        isSubscribed: !!cached?.isSubscribed,
+      };
+
+      if (message?.forceRefresh) {
+        const fresh = await refreshSubscriptionStatusFromServer();
+        sendResponse({ ok: true, ...fresh });
+      } else {
+        sendResponse({ ok: true, ...out });
+      }
+    })();
+    return true; // keep channel open for async response
   }
 });

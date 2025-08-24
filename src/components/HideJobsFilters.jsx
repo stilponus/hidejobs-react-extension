@@ -1,6 +1,6 @@
-// src/components/HideJobsFilters.jsx   (your Filters panel)
-import React, { useEffect, useMemo, useState } from "react";
-import { Switch, Typography, Tooltip, Button } from "antd";
+// src/components/HideJobsFilters.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Switch, Tooltip, Button } from "antd";
 import {
   InfoCircleOutlined,
   CrownFilled,
@@ -10,16 +10,16 @@ import {
   applyOverlaysFromLocalStorage,
   toggleHideShowReposted,
   HIDE_REPOSTED_STATE_KEY,
-  FEATURE_BADGE_KEY,          // ✅ import the feature key
+  FEATURE_BADGE_KEY,
 } from "./RepostedJobs/repostedDom";
 
-const { Text } = Typography;
+import SubscribeButton from "./SubscribeButton"; // ⬅️ reuse SubscribeButton
 
 const FILTER_KEYS = [
   "dismissed",
   "promoted",
   "viewed",
-  "repostedGhost",           // <- this switch should mirror FEATURE_BADGE_KEY
+  "repostedGhost",
   "indeedSponsored",
   "glassdoorApplied",
   "indeedApplied",
@@ -29,7 +29,18 @@ const FILTER_KEYS = [
   "companies",
 ];
 
-const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map(k => [k, false]));
+const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
+
+const PREMIUM_KEYS = new Set([
+  "repostedGhost",
+  "indeedSponsored",
+  "glassdoorApplied",
+  "indeedApplied",
+  "applied",
+  "filterByHours",
+  "userText",
+  "companies",
+]);
 
 function getChrome() {
   try {
@@ -59,6 +70,48 @@ export default function HideJobsFilters() {
   const [values, setValues] = useState(DEFAULT_STATE);
   const [compact, setCompact] = useState(false);
 
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState("unknown"); // kept internally (not shown)
+  const prevIsSubscribedRef = useRef(false);
+
+  const broadcastFiltersChanged = (nextValues) => {
+    try {
+      const evt = new CustomEvent("hidejobs-filters-changed", { detail: nextValues });
+      window.dispatchEvent(evt);
+    } catch { }
+  };
+
+  const turnOffAllPremium = async () => {
+    setValues((prev) => {
+      const next = { ...prev };
+      PREMIUM_KEYS.forEach((k) => (next[k] = false));
+      return next;
+    });
+
+    if (chromeApi) {
+      const toSet = {};
+      PREMIUM_KEYS.forEach((k) => {
+        toSet[`${k}BadgeVisible`] = false;
+        toSet[`${k}Hidden`] = false;
+      });
+      toSet[FEATURE_BADGE_KEY] = false;
+      toSet[HIDE_REPOSTED_STATE_KEY] = "false";
+      await chromeApi.storage.local.set(toSet);
+
+      try {
+        toggleHideShowReposted(false);
+        clearRepostedBadgesFromDOM();
+      } catch { }
+    }
+
+    setValues((current) => {
+      const snapshot = { ...current };
+      PREMIUM_KEYS.forEach((k) => (snapshot[k] = false));
+      broadcastFiltersChanged(snapshot);
+      return current;
+    });
+  };
+
   useEffect(() => {
     if (!chromeApi) return;
 
@@ -69,9 +122,11 @@ export default function HideJobsFilters() {
         ...visibilityKeys,
         "dismissedBadgeVisible",
         "badgesCompact",
-        FEATURE_BADGE_KEY,                   // ✅ also load the feature key on init
+        FEATURE_BADGE_KEY,
+        "isSubscribed",
+        "subscriptionStatus",
       ],
-      (res) => {
+      async (res) => {
         const next = { ...DEFAULT_STATE };
 
         FILTER_KEYS.forEach((k) => {
@@ -80,17 +135,43 @@ export default function HideJobsFilters() {
           }
         });
 
-        // ✅ Make FEATURE_BADGE_KEY the source of truth for the switch
-        // Default ON unless explicitly false
+        // FEATURE_BADGE_KEY is the source of truth for repostedGhost
         next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
 
         setValues(next);
         setCompact(!!res?.badgesCompact);
+
+        const wasSub = !!res?.isSubscribed;
+        setIsSubscribed(wasSub);
+        setSubscriptionStatus(res?.subscriptionStatus || "unknown");
+        prevIsSubscribedRef.current = wasSub;
+
+        if (!wasSub) {
+          await turnOffAllPremium();
+        }
       }
     );
 
-    // Listen for storage changes (flags + compact + FEATURE_BADGE_KEY)
-    const handleStorage = (changes, area) => {
+    // Force a FRESH status on every mount (page reload)
+    chrome.runtime?.sendMessage?.(
+      { type: "get-subscription-status", forceRefresh: true },
+      async (reply) => {
+        if (reply?.ok) {
+          const wasSub = prevIsSubscribedRef.current;
+          const nowSub = !!reply.isSubscribed;
+
+          setIsSubscribed(nowSub);
+          setSubscriptionStatus(reply.status || "unknown");
+
+          if (wasSub && !nowSub) {
+            await turnOffAllPremium();
+          }
+          prevIsSubscribedRef.current = nowSub;
+        }
+      }
+    );
+
+    const handleStorage = async (changes, area) => {
       if (area !== "local") return;
 
       let touched = false;
@@ -108,7 +189,6 @@ export default function HideJobsFilters() {
         setCompact(!!changes.badgesCompact.newValue);
       }
 
-      // ✅ Keep in sync with changes coming from the Reposted panel
       if (FEATURE_BADGE_KEY in changes) {
         delta.repostedGhost = changes[FEATURE_BADGE_KEY]?.newValue !== false;
         touched = true;
@@ -117,6 +197,24 @@ export default function HideJobsFilters() {
       if (touched) {
         setValues((prev) => ({ ...prev, ...delta }));
       }
+
+      // subscription changes pushed by background
+      let didUnsubscribeNow = false;
+
+      if ("isSubscribed" in changes) {
+        const nowSub = !!changes.isSubscribed.newValue;
+        const wasSub = prevIsSubscribedRef.current;
+        setIsSubscribed(nowSub);
+        if (wasSub && !nowSub) didUnsubscribeNow = true;
+        prevIsSubscribedRef.current = nowSub;
+      }
+      if ("subscriptionStatus" in changes) {
+        setSubscriptionStatus(changes.subscriptionStatus.newValue || "unknown");
+      }
+
+      if (didUnsubscribeNow) {
+        await turnOffAllPremium();
+      }
     };
 
     chromeApi.storage.onChanged.addListener(handleStorage);
@@ -124,6 +222,8 @@ export default function HideJobsFilters() {
   }, [chromeApi]);
 
   const updateValue = (key, checked) => {
+    if (PREMIUM_KEYS.has(key) && !isSubscribed) return;
+
     setValues((prev) => ({ ...prev, [key]: checked }));
 
     if (chromeApi) {
@@ -135,16 +235,13 @@ export default function HideJobsFilters() {
       }
 
       if (key === "repostedGhost") {
-        // ✅ Persist the cross-panel feature toggle
         chromeApi.storage.local.set({ [FEATURE_BADGE_KEY]: checked });
 
         if (!checked) {
-          // OFF -> clear badges, show rows, reset hide
           chromeApi.storage.local.set({ [HIDE_REPOSTED_STATE_KEY]: "false" });
           toggleHideShowReposted(false);
           clearRepostedBadgesFromDOM();
         } else {
-          // ON -> re-apply badges
           applyOverlaysFromLocalStorage();
         }
       }
@@ -162,11 +259,25 @@ export default function HideJobsFilters() {
     chromeApi?.storage?.local?.set?.({ badgesCompact: checked });
   };
 
+  const goToCompaniesList = () => {
+    // ✅ drop a one-time breadcrumb so Companies panel knows we came from Filters
+    chromeApi?.storage?.local?.set?.({
+      companies_came_from_filters: true,
+      hidejobs_panel_view: "companies",
+      hidejobs_panel_visible: true,
+    });
+
+    try {
+      const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "companies" } });
+      window.dispatchEvent(evt);
+    } catch { }
+  };
+
   const rows = [
     { key: "dismissed", label: "Dismissed" },
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
-    { key: "repostedGhost", label: "Reposted Jobs", premium: true }, // ← this switch mirrors FEATURE_BADGE_KEY
+    { key: "repostedGhost", label: "Reposted Jobs", premium: true },
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true, help: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true, help: true },
@@ -176,12 +287,58 @@ export default function HideJobsFilters() {
     { key: "companies", label: "Companies", premium: true },
   ];
 
-  const goToCompaniesList = () => {
-    chromeApi?.storage?.local?.set?.({ hidejobs_panel_view: "companies", hidejobs_panel_visible: true });
-    try {
-      const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "companies" } });
-      window.dispatchEvent(evt);
-    } catch { }
+  const freeRows = rows.filter((r) => !r.premium);
+  const premiumRows = rows.filter((r) => r.premium);
+
+  const renderRow = (row, isLast) => {
+    const disabled = !!row.premium && !isSubscribed;
+
+    const rightControl =
+      row.key === "companies" ? (
+        <div className="flex items-center gap-2">
+          <Tooltip title={disabled ? "Subscribe to enable" : "Open Hidden Companies list"}>
+            <Button
+              size="small"
+              icon={<EyeInvisibleFilled />}
+              onClick={disabled ? undefined : goToCompaniesList}
+              disabled={disabled}
+            >
+              List
+            </Button>
+          </Tooltip>
+          <Switch
+            size="small"
+            checked={!!values[row.key]}
+            onChange={(checked) => updateValue(row.key, checked)}
+            disabled={disabled}
+          />
+        </div>
+      ) : (
+        <Switch
+          size="small"
+          checked={!!values[row.key]}
+          onChange={(checked) => updateValue(row.key, checked)}
+          disabled={disabled}
+        />
+      );
+
+    return (
+      <div
+        key={row.key}
+        className={`flex items-center justify-between px-3 py-2 ${isLast ? "" : "border-b border-gray-100"}`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
+          <span className={`truncate ${disabled ? "text-gray-400" : ""}`}>{row.label}</span>
+          {row.help ? (
+            <Tooltip title={disabled ? "Subscribe to enable" : "Info"}>
+              <InfoCircleOutlined className={`${disabled ? "text-gray-300" : "text-gray-400"}`} />
+            </Tooltip>
+          ) : null}
+        </div>
+        {rightControl}
+      </div>
+    );
   };
 
   return (
@@ -189,56 +346,40 @@ export default function HideJobsFilters() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
         <div className="flex items-center gap-2">
-          <Text type="secondary" className="text-sm">Compact badges</Text>
+          <span className="text-sm text-gray-500">Smaller badges</span>
           <Switch size="small" checked={!!compact} onChange={updateCompact} />
         </div>
       </div>
 
       <div className="rounded-lg border border-gray-200">
-        {rows.map((row, idx) => {
-          const isLast = idx === rows.length - 1;
+        {/* Free rows (always fully interactive) */}
+        {freeRows.map((row, idx) =>
+          renderRow(row, idx === freeRows.length - (premiumRows.length ? 0 : 1))
+        )}
 
-          const rightControl =
-            row.key === "companies" ? (
-              <div className="flex items-center gap-2">
-                <Tooltip title="Open Hidden Companies list">
-                  <Button size="small" icon={<EyeInvisibleFilled />} onClick={goToCompaniesList}>
-                    List
-                  </Button>
-                </Tooltip>
-                <Switch
-                  size="small"
-                  checked={!!values[row.key]}
-                  onChange={(checked) => updateValue(row.key, checked)}
-                />
-              </div>
-            ) : (
-              <Switch
-                size="small"
-                checked={!!values[row.key]}
-                onChange={(checked) => updateValue(row.key, checked)}
-              />
-            );
-
-          return (
-            <div
-              key={row.key}
-              className={`flex items-center justify-between px-3 py-2 ${isLast ? "" : "border-b border-gray-100"}`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
-                <Text className="truncate">{row.label}</Text>
-                {row.help ? (
-                  <Tooltip title="Info">
-                    <InfoCircleOutlined className="text-gray-400" />
-                  </Tooltip>
-                ) : null}
-              </div>
-              {rightControl}
+        {/* Premium rows */}
+        {premiumRows.length > 0 && (
+          <div className="relative">
+            <div className={!isSubscribed ? "opacity-50 pointer-events-none" : ""}>
+              {premiumRows.map((row, idx) =>
+                renderRow(row, idx === premiumRows.length - 1)
+              )}
             </div>
-          );
-        })}
+            {!isSubscribed && (
+              <Tooltip
+                title={<span style={{ color: "#333", fontWeight: 600 }}>Subscribe to unlock</span>}
+                color="#feb700"
+                placement="top"
+              >
+                <div className="absolute inset-0" />
+              </Tooltip>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Shared SubscribeButton component */}
+      {!isSubscribed && <SubscribeButton />}
     </div>
   );
 }
