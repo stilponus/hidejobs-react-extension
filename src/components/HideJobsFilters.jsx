@@ -1,10 +1,10 @@
-// src/components/HideJobsFilters.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Switch, Tooltip, Button } from "antd";
 import {
   InfoCircleOutlined,
   CrownFilled,
   EyeInvisibleFilled,
+  QuestionCircleFilled,
 } from "@ant-design/icons";
 import {
   applyOverlaysFromLocalStorage,
@@ -13,7 +13,8 @@ import {
   FEATURE_BADGE_KEY,
 } from "./RepostedJobs/repostedDom";
 
-import SubscribeButton from "./SubscribeButton"; // ⬅️ reuse SubscribeButton
+import SubscribeButton from "./SubscribeButton";
+import InteractiveTour from "./InteractiveTour";
 
 const FILTER_KEYS = [
   "dismissed",
@@ -71,8 +72,10 @@ export default function HideJobsFilters() {
   const [compact, setCompact] = useState(false);
 
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [subscriptionStatus, setSubscriptionStatus] = useState("unknown"); // kept internally (not shown)
+  const [subscriptionStatus, setSubscriptionStatus] = useState("unknown");
   const prevIsSubscribedRef = useRef(false);
+
+  const [tourOpen, setTourOpen] = useState(false);
 
   const broadcastFiltersChanged = (nextValues) => {
     try {
@@ -135,7 +138,6 @@ export default function HideJobsFilters() {
           }
         });
 
-        // FEATURE_BADGE_KEY is the source of truth for repostedGhost
         next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
 
         setValues(next);
@@ -152,7 +154,6 @@ export default function HideJobsFilters() {
       }
     );
 
-    // Force a FRESH status on every mount (page reload)
     chrome.runtime?.sendMessage?.(
       { type: "get-subscription-status", forceRefresh: true },
       async (reply) => {
@@ -198,7 +199,6 @@ export default function HideJobsFilters() {
         setValues((prev) => ({ ...prev, ...delta }));
       }
 
-      // subscription changes pushed by background
       let didUnsubscribeNow = false;
 
       if ("isSubscribed" in changes) {
@@ -260,7 +260,6 @@ export default function HideJobsFilters() {
   };
 
   const goToCompaniesList = () => {
-    // ✅ drop a one-time breadcrumb so Companies panel knows we came from Filters
     chromeApi?.storage?.local?.set?.({
       companies_came_from_filters: true,
       hidejobs_panel_view: "companies",
@@ -268,7 +267,9 @@ export default function HideJobsFilters() {
     });
 
     try {
-      const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "companies" } });
+      const evt = new CustomEvent("hidejobs-panel-set-view", {
+        detail: { view: "companies" },
+      });
       window.dispatchEvent(evt);
     } catch { }
   };
@@ -325,6 +326,7 @@ export default function HideJobsFilters() {
     return (
       <div
         key={row.key}
+        data-filter-row={row.key}
         className={`flex items-center justify-between px-3 py-2 ${isLast ? "" : "border-b border-gray-100"}`}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -343,8 +345,21 @@ export default function HideJobsFilters() {
 
   return (
     <div className="space-y-4">
+      {/* Header with Help button to start the tour */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
+          <Tooltip title="How it works">
+            <Button
+              type="text"
+              size="small"
+              icon={<QuestionCircleFilled />}
+              onClick={() => setTourOpen(true)}
+              aria-label="How it works"
+            />
+          </Tooltip>
+        </div>
+
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-500">Smaller badges</span>
           <Switch size="small" checked={!!compact} onChange={updateCompact} />
@@ -352,18 +367,14 @@ export default function HideJobsFilters() {
       </div>
 
       <div className="rounded-lg border border-gray-200">
-        {/* Free rows (always fully interactive) */}
         {freeRows.map((row, idx) =>
           renderRow(row, idx === freeRows.length - (premiumRows.length ? 0 : 1))
         )}
 
-        {/* Premium rows */}
         {premiumRows.length > 0 && (
           <div className="relative">
             <div className={!isSubscribed ? "opacity-50 pointer-events-none" : ""}>
-              {premiumRows.map((row, idx) =>
-                renderRow(row, idx === premiumRows.length - 1)
-              )}
+              {premiumRows.map((row, idx) => renderRow(row, idx === premiumRows.length - 1))}
             </div>
             {!isSubscribed && (
               <Tooltip
@@ -378,8 +389,10 @@ export default function HideJobsFilters() {
         )}
       </div>
 
-      {/* Shared SubscribeButton component */}
       {!isSubscribed && <SubscribeButton />}
+
+      {/* Tour overlay */}
+      <InteractiveTour open={tourOpen} onClose={() => setTourOpen(false)} />
     </div>
   );
 }
