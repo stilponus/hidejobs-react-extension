@@ -16,6 +16,7 @@ import {
 import SubscribeButton from "./SubscribeButton";
 import InteractiveTour from "./Tours/InteractiveTour";           // Dismissed-only tour
 import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";   // Applied (LinkedIn)-only tour
+import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";   // ← NEW: Companies tour
 
 const FILTER_KEYS = [
   "dismissed",
@@ -79,6 +80,7 @@ export default function HideJobsFilters() {
   // ✅ Separate states for separate tours
   const [dismissedTourOpen, setDismissedTourOpen] = useState(false);
   const [appliedTourOpen, setAppliedTourOpen] = useState(false);
+  const [companiesTourOpen, setCompaniesTourOpen] = useState(false); // ← NEW
 
   const broadcastFiltersChanged = (nextValues) => {
     try {
@@ -307,7 +309,7 @@ export default function HideJobsFilters() {
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
     { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" }, // keep per-row tour for Applied only
-    { key: "companies", label: "Companies", premium: true },
+    { key: "companies", label: "Companies", premium: true, tourKey: "companies" }, // ← NEW: add tourKey for Companies
     { key: "userText", label: "Keywords", premium: true },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "repostedGhost", label: "Reposted Jobs", premium: true },
@@ -329,8 +331,9 @@ export default function HideJobsFilters() {
             <Button
               size="small"
               icon={<EyeInvisibleFilled />}
-              onClick={disabled ? undefined : goToCompaniesList}
-              disabled={disabled}
+              onClick={disabled || companiesTourOpen ? undefined : goToCompaniesList}
+              disabled={disabled || companiesTourOpen}
+              style={companiesTourOpen ? { cursor: "default" } : {}}
             >
               List
             </Button>
@@ -353,7 +356,8 @@ export default function HideJobsFilters() {
 
     const openTourForRow = () => {
       if (row.tourKey === "applied") setAppliedTourOpen(true);
-      // note: no per-row tour launcher for "dismissed" anymore — that's in the header
+      if (row.tourKey === "companies") setCompaniesTourOpen(true); // ← NEW
+      // note: "dismissed" tour is opened from the header "?" only
     };
 
     return (
@@ -366,8 +370,8 @@ export default function HideJobsFilters() {
           {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
           <span className={`truncate ${disabled ? "text-gray-400" : ""}`}>{row.label}</span>
 
-          {/* Only keep row-level “?” for Applied (LinkedIn) */}
-          {row.tourKey === "applied" ? (
+          {/* Row-level “?” only where we have a per-row tour */}
+          {row.tourKey ? (
             <Tooltip title="How it works">
               <Button
                 type="text"
@@ -436,6 +440,7 @@ export default function HideJobsFilters() {
       {/* Overlays */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
       <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
+      <CompanyLinkedinTour open={companiesTourOpen} onClose={() => setCompaniesTourOpen(false)} /> {/* ← NEW */}
     </div>
   );
 }

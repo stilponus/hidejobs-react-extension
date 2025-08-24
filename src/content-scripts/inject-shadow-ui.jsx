@@ -71,6 +71,30 @@ function clearRepostedBadgesFromDOM() {
     --tw-ring-offset-color: #fff;
     --tw-ring-offset-shadow: 0 0 #0000;
   }
+  
+  /* ICON COLOR FIX */
+  .anticon svg {
+    fill: currentColor !important;
+  }
+  
+  .text-hidejobs-700 {
+  color: #28507c !important;
+}
+
+.text-hidejobs-700 svg {
+  fill: currentColor !important;
+  color: inherit !important;
+}
+
+.icon-18 {
+  font-size: 18px !important;
+}
+
+.icon-18 svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+  
   ${tailwindCss.replace(/(\d*\.?\d+)rem/g, (_, rem) => `${parseFloat(rem) * 16}px`)}
 `;
   shadowRoot.appendChild(style);
