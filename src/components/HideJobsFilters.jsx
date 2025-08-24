@@ -98,7 +98,7 @@ export default function HideJobsFilters() {
       const toSet = {};
       PREMIUM_KEYS.forEach((k) => {
         toSet[`${k}BadgeVisible`] = false;
-        toSet[`${k}Hidden`] = false; // ensure hiding is off, too
+        toSet[`${k}Hidden`] = false;
       });
       toSet[FEATURE_BADGE_KEY] = false;
       toSet[HIDE_REPOSTED_STATE_KEY] = "false";
@@ -250,7 +250,7 @@ export default function HideJobsFilters() {
       };
 
       if (key === "dismissed") {
-        updates["dismissedBadgeVisible"] = checked;
+        updates["dismissedBadgeVisible"] = checked; // legacy mirror
       }
 
       if (key === "repostedGhost") {
@@ -301,18 +301,19 @@ export default function HideJobsFilters() {
     } catch { }
   };
 
+  // Rows
   const rows = [
-    { key: "dismissed", label: "Dismissed", tourKey: "dismissed" },
+    { key: "dismissed", label: "Dismissed", tourKey: "dismissed" }, // header question mark will open this tour
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
+    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" }, // keep per-row tour for Applied only
+    { key: "companies", label: "Companies", premium: true },
+    { key: "userText", label: "Keywords", premium: true },
+    { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "repostedGhost", label: "Reposted Jobs", premium: true },
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true },
-    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" },
-    { key: "filterByHours", label: "Filter by Hours", premium: true },
-    { key: "userText", label: "Keywords", premium: true },
-    { key: "companies", label: "Companies", premium: true },
   ];
 
   const freeRows = rows.filter((r) => !r.premium);
@@ -351,8 +352,8 @@ export default function HideJobsFilters() {
       );
 
     const openTourForRow = () => {
-      if (row.tourKey === "dismissed") setDismissedTourOpen(true);
-      else if (row.tourKey === "applied") setAppliedTourOpen(true);
+      if (row.tourKey === "applied") setAppliedTourOpen(true);
+      // note: no per-row tour launcher for "dismissed" anymore — that's in the header
     };
 
     return (
@@ -365,7 +366,8 @@ export default function HideJobsFilters() {
           {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
           <span className={`truncate ${disabled ? "text-gray-400" : ""}`}>{row.label}</span>
 
-          {row.tourKey ? (
+          {/* Only keep row-level “?” for Applied (LinkedIn) */}
+          {row.tourKey === "applied" ? (
             <Tooltip title="How it works">
               <Button
                 type="text"
@@ -384,9 +386,18 @@ export default function HideJobsFilters() {
 
   return (
     <div className="space-y-4">
+      {/* Header with the question mark back at the title */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
+          <Tooltip title="How it works">
+            <Button
+              type="text"
+              size="small"
+              icon={<QuestionCircleFilled className="text-gray-400" />}
+              onClick={() => setDismissedTourOpen(true)}
+            />
+          </Tooltip>
         </div>
 
         <div className="flex items-center gap-2">
@@ -396,10 +407,12 @@ export default function HideJobsFilters() {
       </div>
 
       <div className="rounded-lg border border-gray-200">
+        {/* Free rows */}
         {freeRows.map((row, idx) =>
           renderRow(row, idx === freeRows.length - (premiumRows.length ? 0 : 1))
         )}
 
+        {/* Premium rows */}
         {premiumRows.length > 0 && (
           <div className="relative">
             <div className={!isSubscribed ? "opacity-50 pointer-events-none" : ""}>
@@ -420,6 +433,7 @@ export default function HideJobsFilters() {
 
       {!isSubscribed && <SubscribeButton />}
 
+      {/* Overlays */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
       <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
     </div>

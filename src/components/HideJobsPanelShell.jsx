@@ -346,11 +346,23 @@ const HideJobsPanelShell = () => {
         {`
           .button-wrapper {
             right: -150px;
-            transition: right 0.3s ease-in-out, top 0.3s ease-in-out;
+            /* Only animate the slide-in/out on the RIGHT axis */
+            transition: right 0.3s ease-in-out;
           }
-          .button-wrapper.slide-visible { right: -20px; transition: right 0.3s ease-in-out, top 0.3s ease-in-out; }
+
+          .button-wrapper.slide-visible {
+            right: -20px;
+            transition: right 0.3s ease-in-out;
+          }
+
           .button-wrapper.slide-visible:hover { right: 0; }
-          .button-wrapper.dragging { right: 0; }
+
+          /* While dragging: no transitions at all => immediate movement */
+          .button-wrapper.dragging {
+            right: 0;
+            transition: none !important;
+          }
+
           .button-wrapper:hover .tooltip { opacity: 1; }
           .button-wrapper.dragging .tooltip { opacity: 0 !important; }
           .button-wrapper.hidden { right: -150px; }

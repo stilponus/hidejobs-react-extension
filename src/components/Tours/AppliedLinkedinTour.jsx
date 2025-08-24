@@ -3,21 +3,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 
-/** ✅ Keys your extension uses in chrome.storage.local */
-const FILTER_KEYS = [
-  "dismissed",
-  "promoted",
-  "viewed",
-  "repostedGhost",
-  "indeedSponsored",
-  "glassdoorApplied",
-  "indeedApplied",
-  "applied",            // <- our main target for this tour
-  "filterByHours",
-  "userText",
-  "companies",
-];
-
 /* ──────────────────────────────────────────────────────────
    Utilities
    ────────────────────────────────────────────────────────── */
@@ -25,7 +10,7 @@ const FILTER_KEYS = [
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch { }
+  } catch {}
   return null;
 }
 
@@ -41,23 +26,23 @@ function setPanelVisible(visible, { instant = false } = {}) {
       detail: { visible, instant },
     });
     window.dispatchEvent(evt);
-  } catch { }
+  } catch {}
 }
 
 /** Belt-and-suspenders helpers to remove animation race conditions */
-function raf(fn) { return requestAnimationFrame(fn); }
+function raf(fn) {
+  return requestAnimationFrame(fn);
+}
 
 function openPanelInstant(chromeApi, view = "filters") {
   return new Promise((resolve) => {
     chromeApi?.storage?.local?.set?.(
       { hidejobs_panel_view: view, hidejobs_panel_visible: true, hidejobs_panel_anim: "instant" },
       () => {
-        // Tell shell which view we want (in case it listens to events)
         try {
           const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view } });
           window.dispatchEvent(evt);
-        } catch { }
-        // Double-RAF to beat any animated open from storage listeners
+        } catch {}
         raf(() => {
           setPanelVisible(true, { instant: true });
           raf(() => {
@@ -75,7 +60,6 @@ function closePanelInstant(chromeApi) {
     chromeApi?.storage?.local?.set?.(
       { hidejobs_panel_visible: false, hidejobs_panel_anim: "instant" },
       () => {
-        // Double-RAF to beat any animated close from storage listeners
         raf(() => {
           setPanelVisible(false, { instant: true });
           raf(() => {
@@ -89,15 +73,13 @@ function closePanelInstant(chromeApi) {
 }
 
 /* ──────────────────────────────────────────────────────────
-   STEP TARGET FINDERS (edit/selectors here if your DOM changes)
+   STEP TARGET FINDERS
    ────────────────────────────────────────────────────────── */
 
-/** NEW STEP 1 target: LinkedIn job detail panel (right side) - was old Step 4 */
 function findJobDetailSection() {
   return document.querySelector("div.scaffold-layout__detail") || null;
 }
 
-/** NEW STEP 2 target: the "Applied" row (label + switch) inside the Filters panel - was old Step 1 */
 function findAppliedRow() {
   const root = getPanelShadowRoot();
   if (!root) return null;
@@ -119,7 +101,6 @@ function findAppliedRow() {
   return null;
 }
 
-/** NEW STEP 3 target: the "Applied" badge in your right stack / top controls - was old Step 2 */
 function findAppliedBadge() {
   const root = getPanelShadowRoot();
   if (!root) return null;
@@ -139,7 +120,6 @@ function findAppliedBadge() {
   return null;
 }
 
-/** NEW STEP 4 target: LinkedIn job list section (outer scroll/list container) - was old Step 3 */
 function findJobListSection() {
   return document.querySelector("div.scaffold-layout__list") || null;
 }
@@ -151,48 +131,44 @@ function findJobListSection() {
 export default function AppliedLinkedinTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
-  const [step, setStep] = useState(1);  // Order: 1(detail)->2(filters row)->3(badge)->4(list)
+  const [step, setStep] = useState(1); // 1(detail)->2(filters row)->3(badge)->4(list)
   const rafRef = useRef();
   const boxRef = useRef(null);
 
-  /* Reset step each time the tour opens */
   useEffect(() => {
     if (open) setStep(1);
   }, [open]);
 
-  /* NEW STEP 1: Force panel CLOSED when tour starts (storage first, then instant event) */
   useEffect(() => {
     if (!open || !chromeApi) return;
     closePanelInstant(chromeApi);
   }, [open, chromeApi]);
 
-  /* NEW STEP 2: force ALL toggles OFF (including compact OFF) once when entering step 2 */
+  /* ✅ Step 2: only reset compact + applied toggle */
   useEffect(() => {
     if (!open || !chromeApi) return;
     if (step !== 2) return;
 
-    const toSet = { badgesCompact: false };
-    FILTER_KEYS.forEach((k) => {
-      toSet[`${k}Hidden`] = false;
-      toSet[`${k}BadgeVisible`] = false;
-    });
+    const toSet = {
+      badgesCompact: false,
+      appliedHidden: false,
+      appliedBadgeVisible: false,
+    };
 
     chromeApi.storage.local.set(toSet, () => {
       try {
-        const detail = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
+        const detail = { applied: false };
         window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
-      } catch { }
+      } catch {}
     });
   }, [open, step, chromeApi]);
 
-  /* ENTERING STEP 2: open panel on filters view instantly (storage first, then instant event x2) */
   useEffect(() => {
     if (!open || !chromeApi) return;
     if (step !== 2) return;
     openPanelInstant(chromeApi, "filters");
   }, [open, step, chromeApi]);
 
-  /* If user turns Applied ON during Step 2 → go to Step 3 & close panel instantly */
   useEffect(() => {
     if (!open || !chromeApi) return;
 
@@ -212,16 +188,15 @@ export default function AppliedLinkedinTour({ open, onClose }) {
     return () => chromeApi.storage.onChanged.removeListener(onChange);
   }, [open, step, chromeApi]);
 
-  /* Measure current target (re-run on DOM changes / resize / scroll) */
   useEffect(() => {
     if (!open) return;
 
     const measure = () => {
       let el = null;
-      if (step === 1) el = findJobDetailSection();    // NEW: was old step 4
-      else if (step === 2) el = findAppliedRow();     // NEW: was old step 1
-      else if (step === 3) el = findAppliedBadge();   // NEW: was old step 2
-      else if (step === 4) el = findJobListSection(); // NEW: was old step 3
+      if (step === 1) el = findJobDetailSection();
+      else if (step === 2) el = findAppliedRow();
+      else if (step === 3) el = findAppliedBadge();
+      else if (step === 4) el = findJobListSection();
 
       if (!el) {
         setRect(null);
@@ -256,12 +231,10 @@ export default function AppliedLinkedinTour({ open, onClose }) {
     };
   }, [open, step]);
 
-  /* Block interactions outside the hole; allow instruction box; ESC closes */
   useEffect(() => {
     if (!open) return;
 
     const PADDING = 8;
-
     const isInsideHole = (ev) => {
       if (!rect) return false;
       const { clientX: x, clientY: y } = ev;
@@ -272,7 +245,6 @@ export default function AppliedLinkedinTour({ open, onClose }) {
         y <= rect.y + rect.h + PADDING
       );
     };
-
     const isInsideBox = (ev) => {
       const el = boxRef.current;
       if (!el) return false;
@@ -282,13 +254,11 @@ export default function AppliedLinkedinTour({ open, onClose }) {
       }
       return el.contains(ev.target);
     };
-
     const guard = (ev) => {
       if (isInsideHole(ev) || isInsideBox(ev)) return;
       ev.preventDefault();
       ev.stopPropagation();
     };
-
     const onPointer = (ev) => guard(ev);
     const onWheel = (ev) => guard(ev);
     const onKey = (ev) => {
@@ -302,7 +272,6 @@ export default function AppliedLinkedinTour({ open, onClose }) {
         ev.stopPropagation();
       }
     };
-
     const onEsc = (e) => e.key === "Escape" && onClose?.();
 
     window.addEventListener("pointerdown", onPointer, true);
@@ -326,13 +295,10 @@ export default function AppliedLinkedinTour({ open, onClose }) {
     };
   }, [open, rect, onClose]);
 
-  /* Buttons logic */
   const handlePrev = () => {
     if (step === 2) {
-      // Back to Step 1: close panel instantly
       closePanelInstant(chromeApi).then(() => setStep(1));
     } else if (step === 3) {
-      // Back to Step 2: open panel instantly
       openPanelInstant(chromeApi, "filters").then(() => setStep(2));
     } else if (step === 4) {
       setStep(3);
@@ -341,10 +307,8 @@ export default function AppliedLinkedinTour({ open, onClose }) {
 
   const handleNext = () => {
     if (step === 1) {
-      // Move to Step 2 (panel will open via its effect)
       setStep(2);
     } else if (step === 2) {
-      // Turn ON "Applied": hide jobs + show badge, then close panel instantly
       chromeApi?.storage?.local?.set(
         {
           appliedHidden: true,
@@ -362,56 +326,41 @@ export default function AppliedLinkedinTour({ open, onClose }) {
 
   if (!open) return null;
 
-  /* ──────────────────────────────────────────────────────────
-     INSTRUCTION TEXT (updated for new order)
-     ────────────────────────────────────────────────────────── */
-
   const stepTitle = step === 1 ? "Step 1" : step === 2 ? "Step 2" : step === 3 ? "Step 3" : "Step 4";
   const stepText =
     step === 1
       ? "Every time you apply, mark the job as Applied. If you apply on a company website, LinkedIn will show this prompt below when you return — click Yes to confirm. Jobs applied with Easy Apply are marked automatically."
       : step === 2
-        ? "In order to start hiding applied jobs, turn ON the Applied filter. Try it here, or just click Next."
-        : step === 3
-          ? "Turning a filter ON hides applied jobs immediately. A badge appears here as a quick control, showing how many are hidden. Click it anytime to pause or resume hiding without removing the badge."
-          : "Job cards marked as Applied will disappear from this list, letting you focus on opportunities that matter.";
+      ? "In order to start hiding applied jobs, turn ON the Applied filter. Try it here, or just click Next."
+      : step === 3
+      ? "Turning a filter ON hides applied jobs immediately. A badge appears here as a quick control, showing how many are hidden. Click it anytime to pause or resume hiding without removing the badge."
+      : "Job cards marked as Applied will disappear from this list, letting you focus on opportunities that matter.";
 
-  /* ──────────────────────────────────────────────────────────
-     Instruction box positioning
-     ────────────────────────────────────────────────────────── */
   const hole = rect || { x: -9999, y: -9999, w: 0, h: 0 };
   const gap = 12;
   const boxW = 328;
-  const estBoxH = step === 1 ? 260 : 170; // Step 1 (old step 4) needs more height
+  const estBoxH = step === 1 ? 260 : 170;
 
   let boxTop, boxLeft;
   if (step === 1) {
-    // Step 1 (job detail): Always position LEFT of the highlighted detail panel
     boxLeft = Math.max(12, hole.x - gap - boxW);
     boxTop = Math.max(12, Math.min(window.innerHeight - estBoxH - 12, hole.y));
   } else if (step === 4) {
-    // Step 4 (job list): Prefer RIGHT of the highlighted area
     const preferRight = hole.x + hole.w + gap;
     const fitsRight = preferRight + boxW + 12 <= window.innerWidth;
     boxLeft = fitsRight ? preferRight : Math.max(12, hole.x - gap - boxW);
     boxTop = Math.max(12, Math.min(window.innerHeight - estBoxH - 12, hole.y));
   } else {
-    // Steps 2 and 3: position below or above
     const placeBelow =
       hole.y + hole.h + gap + estBoxH <= window.innerHeight || hole.y < estBoxH + gap;
     boxTop = placeBelow ? hole.y + hole.h + gap : Math.max(12, hole.y - estBoxH - gap);
     boxLeft = Math.max(12, Math.min(window.innerWidth - boxW - 12, hole.x));
   }
 
-  /* ──────────────────────────────────────────────────────────
-     Render
-     ────────────────────────────────────────────────────────── */
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }} aria-hidden>
-      {/* Hide ant tooltips/popovers during the tour */}
       <style>{`.ant-tooltip,.ant-popover{display:none !important;}`}</style>
 
-      {/* Mask + transparent "hole" over the highlighted element */}
       <svg width="100%" height="100%" style={{ position: "fixed", inset: 0, display: "block" }}>
         <defs>
           <mask id="hj-tour-mask-applied">
@@ -437,7 +386,6 @@ export default function AppliedLinkedinTour({ open, onClose }) {
         />
       </svg>
 
-      {/* Instruction box */}
       <div
         ref={boxRef}
         style={{
@@ -461,19 +409,15 @@ export default function AppliedLinkedinTour({ open, onClose }) {
 
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
 
-        {/* Step 1 (was old Step 4) — render your blue confirmation banner below instructions */}
         {step === 1 && (
           <div className="my-4">
             <div className="bg-[#e9f2ff] rounded-xl px-5 py-4 flex items-center justify-between gap-4">
               <div className="flex-1">
-                <div className="font-semibold text-sm leading-tight mb-1">
-                  Did you apply?
-                </div>
+                <div className="font-semibold text-sm leading-tight mb-1">Did you apply?</div>
                 <div className="text-sm text-[#475467] leading-relaxed">
                   Let us know, and we'll help you track your application.
                 </div>
-              </div>  
-
+              </div>
               <div className="flex items-center gap-6 whitespace-nowrap pt-0.5">
                 <div className="font-semibold text-sm">Yes</div>
                 <div className="font-semibold text-sm">No</div>

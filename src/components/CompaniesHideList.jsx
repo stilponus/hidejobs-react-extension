@@ -338,7 +338,7 @@ export default function CompaniesHideList() {
           </div>
 
           {(loadingTop || filteredTop.length > 0) && (
-            <div className="mt-2">
+            <div className="mt-4">
               <div className="text-sm font-semibold text-hidejobs-700 mb-1">
                 Top 5 Hidden Companies
               </div>
