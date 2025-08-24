@@ -2,7 +2,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Switch, Tooltip, Button } from "antd";
 import {
-  InfoCircleOutlined,
   CrownFilled,
   EyeInvisibleFilled,
   QuestionCircleFilled,
@@ -123,7 +122,7 @@ export default function HideJobsFilters() {
     if (!chromeApi) return;
 
     const visibilityKeys = FILTER_KEYS.map((k) => `${k}BadgeVisible`);
-    const hiddenKeys = FILTER_KEYS.map((k) => `${k}Hidden`); // still read for other logic, but UI binds only to BadgeVisible
+    const hiddenKeys = FILTER_KEYS.map((k) => `${k}Hidden`);
 
     chromeApi.storage.local.get(
       [
@@ -185,7 +184,6 @@ export default function HideJobsFilters() {
       let touched = false;
       const delta = {};
 
-      // Switch state is driven by BadgeVisible only
       FILTER_KEYS.forEach((k) => {
         const badgeKey = `${k}BadgeVisible`;
         if (badgeKey in changes) {
@@ -230,7 +228,6 @@ export default function HideJobsFilters() {
     return () => chromeApi.storage.onChanged.removeListener(handleStorage);
   }, [chromeApi]);
 
-  // Optional: listen to custom events (tour might broadcast immediate UI state)
   useEffect(() => {
     const handleTourEvent = (event) => {
       if (event.detail) {
@@ -244,9 +241,6 @@ export default function HideJobsFilters() {
   const updateValue = (key, checked) => {
     if (PREMIUM_KEYS.has(key) && !isSubscribed) return;
 
-    // Switch reflects badge visibility; when user toggles:
-    //  - set BadgeVisible = checked
-    //  - also set Hidden = checked
     setValues((prev) => ({ ...prev, [key]: checked }));
 
     if (chromeApi) {
@@ -256,10 +250,9 @@ export default function HideJobsFilters() {
       };
 
       if (key === "dismissed") {
-        updates["dismissedBadgeVisible"] = checked; // legacy mirror
+        updates["dismissedBadgeVisible"] = checked;
       }
 
-      // Special handling for reposted
       if (key === "repostedGhost") {
         updates[FEATURE_BADGE_KEY] = checked;
         updates[HIDE_REPOSTED_STATE_KEY] = checked ? "true" : "false";
@@ -281,7 +274,6 @@ export default function HideJobsFilters() {
       });
     }
 
-    // Broadcast convenience event
     try {
       const detail = { ...values, [key]: checked };
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
@@ -309,18 +301,17 @@ export default function HideJobsFilters() {
     } catch { }
   };
 
-  // ✅ Define rows and which ones have their own tour
   const rows = [
-    { key: "dismissed", label: "Dismissed", tourKey: "dismissed" }, // Dismissed has its own tour
+    { key: "dismissed", label: "Dismissed", tourKey: "dismissed" },
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
     { key: "repostedGhost", label: "Reposted Jobs", premium: true },
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
-    { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true, help: true },
-    { key: "indeedApplied", label: "Applied (Indeed)", premium: true, help: true },
-    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" }, // Applied-LinkedIn has its own tour
+    { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
+    { key: "indeedApplied", label: "Applied (Indeed)", premium: true },
+    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
-    { key: "userText", label: "Keywords", premium: true, help: true },
+    { key: "userText", label: "Keywords", premium: true },
     { key: "companies", label: "Companies", premium: true },
   ];
 
@@ -374,14 +365,6 @@ export default function HideJobsFilters() {
           {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
           <span className={`truncate ${disabled ? "text-gray-400" : ""}`}>{row.label}</span>
 
-          {/* Optional generic help for some rows */}
-          {row.help ? (
-            <Tooltip title={disabled ? "Subscribe to enable" : "Info"}>
-              <InfoCircleOutlined className={`${disabled ? "text-gray-300" : "text-gray-400"}`} />
-            </Tooltip>
-          ) : null}
-
-          {/* ✅ Row-specific tour question mark */}
           {row.tourKey ? (
             <Tooltip title="How it works">
               <Button
@@ -401,7 +384,6 @@ export default function HideJobsFilters() {
 
   return (
     <div className="space-y-4">
-      {/* Header — removed generic 'How it works' button to avoid confusion */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
           <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
@@ -414,12 +396,10 @@ export default function HideJobsFilters() {
       </div>
 
       <div className="rounded-lg border border-gray-200">
-        {/* Free rows */}
         {freeRows.map((row, idx) =>
           renderRow(row, idx === freeRows.length - (premiumRows.length ? 0 : 1))
         )}
 
-        {/* Premium rows */}
         {premiumRows.length > 0 && (
           <div className="relative">
             <div className={!isSubscribed ? "opacity-50 pointer-events-none" : ""}>
@@ -440,7 +420,6 @@ export default function HideJobsFilters() {
 
       {!isSubscribed && <SubscribeButton />}
 
-      {/* ✅ Separate tour overlays */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
       <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
     </div>

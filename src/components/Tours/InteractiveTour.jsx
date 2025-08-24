@@ -3,20 +3,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 
-const FILTER_KEYS = [
-  "dismissed",
-  "promoted",
-  "viewed",
-  "repostedGhost",
-  "indeedSponsored",
-  "glassdoorApplied",
-  "indeedApplied",
-  "applied",
-  "filterByHours",
-  "userText",
-  "companies",
-];
-
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
@@ -116,20 +102,20 @@ export default function InteractiveTour({ open, onClose }) {
     );
   }, [open, chromeApi]);
 
-  // STEP 1: force ALL toggles OFF (and compact OFF) once per entry into step 1
+  // ✅ STEP 1: reset only the Dismissed toggle and compact once per entry into step 1
   useEffect(() => {
     if (!open || !chromeApi) return;
     if (step !== 1) return;
 
-    const toSet = { badgesCompact: false };
-    FILTER_KEYS.forEach((k) => {
-      toSet[`${k}Hidden`] = false;
-      toSet[`${k}BadgeVisible`] = false;
-    });
+    const toSet = {
+      badgesCompact: false,
+      dismissedHidden: false,
+      dismissedBadgeVisible: false,
+    };
 
     chromeApi.storage.local.set(toSet, () => {
       try {
-        const detail = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
+        const detail = { dismissed: false, badgesCompact: false };
         window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
       } catch { }
     });
@@ -144,7 +130,8 @@ export default function InteractiveTour({ open, onClose }) {
 
       if (step === 1 && ("dismissedHidden" in changes || "dismissedBadgeVisible" in changes)) {
         const hv = "dismissedHidden" in changes ? !!changes.dismissedHidden.newValue : null;
-        const bv = "dismissedBadgeVisible" in changes ? !!changes.dismissedBadgeVisible.newValue : null;
+        const bv =
+          "dismissedBadgeVisible" in changes ? !!changes.dismissedBadgeVisible.newValue : null;
         const nowOn = hv === true || bv === true;
         if (nowOn) {
           setStep(2);
@@ -241,7 +228,9 @@ export default function InteractiveTour({ open, onClose }) {
       const el = boxRef.current;
       if (el && el.contains(document.activeElement)) return;
       if (
-        ["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " ", "Spacebar"].includes(ev.key)
+        ["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " ", "Spacebar"].includes(
+          ev.key
+        )
       ) {
         ev.preventDefault();
         ev.stopPropagation();
@@ -274,11 +263,13 @@ export default function InteractiveTour({ open, onClose }) {
   // Buttons
   const handlePrev = () => {
     if (step === 2) {
-      // Back to Step 1: reopen panel instantly; Step-1 effect will force all toggles OFF
+      // Back to Step 1: reopen panel instantly; Step-1 effect will reset dismissed + compact
       setPanelVisible(true, { instant: true });
       chromeApi?.storage?.local?.set({ hidejobs_panel_visible: true }, () => setStep(1));
       try {
-        const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "filters" } });
+        const evt = new CustomEvent("hidejobs-panel-set-view", {
+          detail: { view: "filters" },
+        });
         window.dispatchEvent(evt);
       } catch { }
     } else if (step === 3) {
@@ -358,7 +349,14 @@ export default function InteractiveTour({ open, onClose }) {
             />
           </mask>
         </defs>
-        <rect x="0" y="0" width="100%" height="100%" fill="rgba(0,0,0,0.45)" mask="url(#hj-tour-mask)" />
+        <rect
+          x="0"
+          y="0"
+          width="100%"
+          height="100%"
+          fill="rgba(0,0,0,0.45)"
+          mask="url(#hj-tour-mask)"
+        />
       </svg>
 
       {/* Instruction box */}
@@ -388,9 +386,13 @@ export default function InteractiveTour({ open, onClose }) {
         <div className="mt-3 flex items-center justify-end gap-2">
           {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
           {step < 3 ? (
-            <Button type="primary" onClick={handleNext}>Next</Button>
+            <Button type="primary" onClick={handleNext}>
+              Next
+            </Button>
           ) : (
-            <Button type="primary" onClick={onClose}>Close</Button>
+            <Button type="primary" onClick={onClose}>
+              Close
+            </Button>
           )}
         </div>
       </div>
