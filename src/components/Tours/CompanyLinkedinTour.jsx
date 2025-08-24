@@ -85,7 +85,7 @@ function openPanelInstant(chromeApi, view = "filters") {
         try {
           const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view } });
           window.dispatchEvent(evt);
-        } catch {}
+        } catch { }
         raf(() => {
           setPanelVisible(true, { instant: true });
           raf(() => {
@@ -115,7 +115,7 @@ function closePanelInstant(chromeApi) {
   });
 }
 
-export default function CompanyLinkedinTour({ open, onClose }) {
+export default function CompanyLinkedinTour({ open, onClose, onStepChange }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
   const [step, setStep] = useState(1); // 1 -> row, 2 -> list, 3 -> row again, 4 -> badge
@@ -124,8 +124,18 @@ export default function CompanyLinkedinTour({ open, onClose }) {
 
   // Reset to step 1 whenever the tour opens
   useEffect(() => {
-    if (open) setStep(1);
-  }, [open]);
+    if (open) {
+      setStep(1);
+      onStepChange?.(1);
+    }
+  }, [open, onStepChange]);
+
+  // Notify parent of step changes
+  useEffect(() => {
+    if (open) {
+      onStepChange?.(step);
+    }
+  }, [step, open, onStepChange]);
 
   // Always show the panel on Filters when the tour starts
   useEffect(() => {
@@ -134,10 +144,10 @@ export default function CompanyLinkedinTour({ open, onClose }) {
     openPanelInstant(chromeApi, "filters");
   }, [open, chromeApi]);
 
-  // ✅ STEP 1 & 3: reset Companies toggle when entering
+  // ✅ STEP 1 ONLY: reset Companies toggle when entering (skip step 3)
   useEffect(() => {
     if (!open || !chromeApi) return;
-    if (step !== 1 && step !== 3) return;
+    if (step !== 1) return; // Only reset on step 1, not step 3
 
     const toSet = {
       badgesCompact: false,
@@ -467,3 +477,6 @@ export default function CompanyLinkedinTour({ open, onClose }) {
     </div>
   );
 }
+
+
+/////////////////////

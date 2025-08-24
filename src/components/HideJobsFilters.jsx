@@ -81,6 +81,7 @@ export default function HideJobsFilters() {
   const [dismissedTourOpen, setDismissedTourOpen] = useState(false);
   const [appliedTourOpen, setAppliedTourOpen] = useState(false);
   const [companiesTourOpen, setCompaniesTourOpen] = useState(false); // ← NEW
+  const [companiesTourStep, setCompaniesTourStep] = useState(1);
 
   const broadcastFiltersChanged = (nextValues) => {
     try {
@@ -331,9 +332,9 @@ export default function HideJobsFilters() {
             <Button
               size="small"
               icon={<EyeInvisibleFilled />}
-              onClick={disabled || companiesTourOpen ? undefined : goToCompaniesList}
-              disabled={disabled || companiesTourOpen}
-              style={companiesTourOpen ? { cursor: "default" } : {}}
+              onClick={disabled || (companiesTourOpen && companiesTourStep === 1) ? undefined : goToCompaniesList}
+              disabled={disabled || (companiesTourOpen && companiesTourStep === 1)}
+              style={(companiesTourOpen && companiesTourStep === 1) ? { cursor: "default" } : {}}
             >
               List
             </Button>
@@ -342,7 +343,7 @@ export default function HideJobsFilters() {
             size="small"
             checked={!!values[row.key]}
             onChange={(checked) => updateValue(row.key, checked)}
-            disabled={disabled}
+            disabled={disabled || (companiesTourOpen && companiesTourStep === 3)}
           />
         </div>
       ) : (
@@ -440,7 +441,10 @@ export default function HideJobsFilters() {
       {/* Overlays */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
       <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
-      <CompanyLinkedinTour open={companiesTourOpen} onClose={() => setCompaniesTourOpen(false)} /> {/* ← NEW */}
-    </div>
+      <CompanyLinkedinTour
+        open={companiesTourOpen}
+        onClose={() => setCompaniesTourOpen(false)}
+        onStepChange={setCompaniesTourStep}
+      />    </div>
   );
 }
