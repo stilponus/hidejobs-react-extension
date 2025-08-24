@@ -1,4 +1,3 @@
-// src/components/HideJobsPanelShell.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { Button, Dropdown } from "antd";
 import {
@@ -22,11 +21,8 @@ import HideJobsPanelSave from "./HideJobsPanelSave";
 import HideJobsPanelLoginRequired from "./HideJobsPanelLoginRequired";
 import HideJobsFilters from "./HideJobsFilters";
 
-// NEW
 import { EyeInvisibleFilled } from "@ant-design/icons";
-// NEW
 import CompaniesHideList from "./CompaniesHideList";
-// NEW: Reposted Panel
 import RepostedPanel from "./RepostedJobs/RepostedPanel";
 
 const HideJobsPanelShell = () => {
@@ -40,19 +36,29 @@ const HideJobsPanelShell = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [panelView, setPanelView] = useState("default");
 
-  useEffect(() => {
-    chrome?.storage?.local?.get(["hidejobs_panel_view"], (result) => {
-      const v = result?.hidejobs_panel_view;
-      // Accept "filters", "default", "companies", "reposted"
-      if (v === "filters" || v === "default" || v === "companies" || v === "reposted") setPanelView(v);
-    });
-  }, []);
-
   const containerRef = useRef(null);
   const buttonRef = useRef(null);
   const dragState = useRef({ drag: false, dragged: false, startY: 0, initTop: 0 });
 
-  // Check login status on mount and listen for storage changes
+  // helpers to disable/enable transition on demand (used by the tour)
+  const setTransitionsEnabled = (enabled) => {
+    const container = containerRef.current;
+    const button = buttonRef.current;
+    const value = enabled ? "" : "none";
+    if (container) container.style.transition = value; // overrides Tailwind/CSS
+    if (button) button.style.transition = value;
+  };
+
+  // Initial view
+  useEffect(() => {
+    chrome?.storage?.local?.get(["hidejobs_panel_view"], (result) => {
+      const v = result?.hidejobs_panel_view;
+      if (v === "filters" || v === "default" || v === "companies" || v === "reposted")
+        setPanelView(v);
+    });
+  }, []);
+
+  // Login status
   useEffect(() => {
     chrome?.storage?.local?.get("user", (result) => {
       setIsLoggedIn(!!result?.user?.uid);
@@ -70,13 +76,33 @@ const HideJobsPanelShell = () => {
     };
   }, []);
 
-  // Panel visibility from storage
+  // Panel visibility from storage (on mount)
   useEffect(() => {
     chrome?.storage?.local?.get(["hidejobs_panel_visible"], (result) => {
-      if (result?.hidejobs_panel_visible === true) {
-        setIsPanelVisible(true);
-      }
+      if (result?.hidejobs_panel_visible === true) setIsPanelVisible(true);
     });
+  }, []);
+
+  // EXPLICIT set-visible (used by the tour) — can disable transitions per action
+  useEffect(() => {
+    const onSetVisible = (e) => {
+      const desired = !!e?.detail?.visible;
+      const instant = !!e?.detail?.instant;
+
+      if (instant) setTransitionsEnabled(false);
+
+      setIsPanelVisible(desired);
+      setIsButtonVisible(!desired);
+      chrome?.storage?.local?.set({ hidejobs_panel_visible: desired });
+
+      if (instant) {
+        // restore transitions on the next tick
+        setTimeout(() => setTransitionsEnabled(true), 0);
+      }
+    };
+
+    window.addEventListener("hidejobs-panel-set-visible", onSetVisible);
+    return () => window.removeEventListener("hidejobs-panel-set-visible", onSetVisible);
   }, []);
 
   // Draggable button logic
@@ -88,9 +114,9 @@ const HideJobsPanelShell = () => {
       dragState.current.drag = true;
       dragState.current.dragged = false;
       dragState.current.startY = e.clientY;
-      dragState.current.initTop = parseInt(button.style.top) || button.getBoundingClientRect().top;
+      dragState.current.initTop =
+        parseInt(button.style.top) || button.getBoundingClientRect().top;
       button.classList.add("dragging");
-      button.style.transition = "none";
     };
 
     const handleMouseMove = (e) => {
@@ -109,7 +135,6 @@ const HideJobsPanelShell = () => {
       if (dragState.current.drag) {
         dragState.current.drag = false;
         button.classList.remove("dragging");
-        button.style.transition = "right 0.3s ease-in-out";
       }
     };
 
@@ -120,7 +145,6 @@ const HideJobsPanelShell = () => {
         return;
       }
 
-      // Restore last view (default -> "default")
       chrome?.storage?.local?.get(["hidejobs_panel_view"], (res) => {
         const lastView =
           res?.hidejobs_panel_view === "filters"
@@ -150,16 +174,14 @@ const HideJobsPanelShell = () => {
     };
   }, []);
 
-  // Toggle panel visibility
+  // Legacy toggle event — keep working for other parts of the app
   useEffect(() => {
     const toggleHandler = () => {
       setIsPanelVisible((prev) => {
         const nowVisible = !prev;
-        // keep last view in storage as well (no change to state)
         chrome?.storage?.local?.set({ hidejobs_panel_view: panelView });
         chrome?.storage?.local?.set({ hidejobs_panel_visible: nowVisible });
-        if (nowVisible) setIsButtonVisible(false);
-        if (!nowVisible) setIsButtonVisible(true);
+        setIsButtonVisible(!nowVisible);
         return nowVisible;
       });
     };
@@ -167,7 +189,7 @@ const HideJobsPanelShell = () => {
     return () => window.removeEventListener("toggle-hidejobs-panel", toggleHandler);
   }, [panelView]);
 
-  // Show button after delay
+  // Show floating button after delay
   useEffect(() => {
     const t = setTimeout(() => setIsButtonVisible(true), 1000);
     return () => clearTimeout(t);
@@ -183,7 +205,7 @@ const HideJobsPanelShell = () => {
     setManualMode(noScraper);
   }, []);
 
-  // NEW: allow other components to force a view (e.g., companies list)
+  // Allow other components to force a view (companies/filters/reposted)
   useEffect(() => {
     const onSetView = (e) => {
       const view = e?.detail?.view;
@@ -204,10 +226,7 @@ const HideJobsPanelShell = () => {
   const handleOpenJob = () => {
     if (trackedJobId) {
       const url = `https://app.hidejobs.com/job-tracker/${trackedJobId}`;
-      console.log("🔓 Opening job in app:", url);
       chrome?.runtime?.sendMessage?.({ type: "open-tab", url });
-    } else {
-      console.warn("⚠️ No tracked_job_id available");
     }
   };
 
@@ -256,8 +275,6 @@ const HideJobsPanelShell = () => {
         setDropdownOpen(false);
       },
     },
-
-    // NEW: Hidden Companies entry (below Filters)
     {
       key: "hidden-companies",
       label: "Hidden Companies",
@@ -271,8 +288,6 @@ const HideJobsPanelShell = () => {
         setDropdownOpen(false);
       },
     },
-
-    // NEW: Reposted jobs entry
     {
       key: "reposted",
       label: "Reposted jobs",
@@ -286,9 +301,7 @@ const HideJobsPanelShell = () => {
         setDropdownOpen(false);
       },
     },
-
-    { type: "divider" }, // 👈 Divider BELOW Filters/Hidden Companies/Reposted
-
+    { type: "divider" },
     {
       key: "home",
       label: "Dashboard",
@@ -335,57 +348,28 @@ const HideJobsPanelShell = () => {
             right: -150px;
             transition: right 0.3s ease-in-out, top 0.3s ease-in-out;
           }
-          .button-wrapper.slide-visible {
-            right: -20px;
-            transition: right 0.3s ease-in-out, top 0.3s ease-in-out;
-          }
-          .button-wrapper.slide-visible:hover {
-            right: 0;
-          }
-          .button-wrapper.dragging {
-            right: 0;
-          }
-          .button-wrapper:hover .tooltip {
-            opacity: 1;
-          }
-          .button-wrapper.dragging .tooltip {
-            opacity: 0 !important;
-          }
-          .button-wrapper.hidden {
-            right: -150px;
-          }
+          .button-wrapper.slide-visible { right: -20px; transition: right 0.3s ease-in-out, top 0.3s ease-in-out; }
+          .button-wrapper.slide-visible:hover { right: 0; }
+          .button-wrapper.dragging { right: 0; }
+          .button-wrapper:hover .tooltip { opacity: 1; }
+          .button-wrapper.dragging .tooltip { opacity: 0 !important; }
+          .button-wrapper.hidden { right: -150px; }
           .blue-section {
             background-color: #28507c;
             border-right: none;
             border-radius: 8px 0 0 8px;
-            padding: 0 5px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 0 5px; height: 50px;
+            display: flex; align-items: center; justify-content: center;
           }
           .red-section {
             background-color: #233b57;
-            width: 20px;
-            height: 50px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            width: 20px; height: 50px;
+            display: flex; justify-content: center; align-items: center;
           }
           .tooltip {
-            position: absolute;
-            top: -35px;
-            left: -10px;
-            transform: translateX(-50%);
-            background-color: #233b57;
-            color: white;
-            font-size: 12px;
-            padding: 4px 8px;
-            border-radius: 5px;
-            white-space: nowrap;
-            opacity: 0;
-            transition: opacity 0.3s ease-in-out;
-            pointer-events: none;
+            position: absolute; top: -35px; left: -10px; transform: translateX(-50%);
+            background-color: #233b57; color: white; font-size: 12px; padding: 4px 8px;
+            border-radius: 5px; white-space: nowrap; opacity: 0; transition: opacity 0.3s ease-in-out; pointer-events: none;
           }
         `}
       </style>
@@ -421,22 +405,15 @@ const HideJobsPanelShell = () => {
               open={dropdownOpen}
               onOpenChange={setDropdownOpen}
               getPopupContainer={() => containerRef.current || document.body}
-              overlayStyle={{
-                zIndex: 10001,
-                position: "absolute",
-              }}
+              overlayStyle={{ zIndex: 10001, position: "absolute" }}
             >
-              <Button
-                type="text"
-                icon={<MenuOutlined className="text-xl" />}
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-              />
+              <Button type="text" icon={<MenuOutlined className="text-xl" />} onClick={() => setDropdownOpen(!dropdownOpen)} />
             </Dropdown>
             <Button
               type="text"
               icon={<CloseOutlined className="text-xl" />}
               onClick={() => {
-                chrome?.storage?.local?.set({ hidejobs_panel_view: panelView }); // keep last view
+                chrome?.storage?.local?.set({ hidejobs_panel_view: panelView });
                 setIsPanelVisible(false);
                 setIsButtonVisible(true);
                 chrome?.storage?.local?.set({ hidejobs_panel_visible: false });
@@ -448,7 +425,6 @@ const HideJobsPanelShell = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 text-sm">
-          {/* "Hidden Companies" and "Reposted" are always accessible (no login required) */}
           {panelView === "companies" ? (
             <CompaniesHideList />
           ) : panelView === "reposted" ? (

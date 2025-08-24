@@ -14,7 +14,8 @@ import {
 } from "./RepostedJobs/repostedDom";
 
 import SubscribeButton from "./SubscribeButton";
-import InteractiveTour from "./InteractiveTour";
+import InteractiveTour from "./Tours//InteractiveTour";
+import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";
 
 const FILTER_KEYS = [
   "dismissed",
@@ -95,7 +96,7 @@ export default function HideJobsFilters() {
       const toSet = {};
       PREMIUM_KEYS.forEach((k) => {
         toSet[`${k}BadgeVisible`] = false;
-        toSet[`${k}Hidden`] = false;
+        toSet[`${k}Hidden`] = false; // ensure hiding is off, too
       });
       toSet[FEATURE_BADGE_KEY] = false;
       toSet[HIDE_REPOSTED_STATE_KEY] = "false";
@@ -119,10 +120,12 @@ export default function HideJobsFilters() {
     if (!chromeApi) return;
 
     const visibilityKeys = FILTER_KEYS.map((k) => `${k}BadgeVisible`);
+    const hiddenKeys = FILTER_KEYS.map((k) => `${k}Hidden`); // still read for other logic, but UI binds only to BadgeVisible
 
     chromeApi.storage.local.get(
       [
         ...visibilityKeys,
+        ...hiddenKeys,
         "dismissedBadgeVisible",
         "badgesCompact",
         FEATURE_BADGE_KEY,
@@ -132,12 +135,13 @@ export default function HideJobsFilters() {
       async (res) => {
         const next = { ...DEFAULT_STATE };
 
+        // UI switch reflects ONLY *BadgeVisible*
         FILTER_KEYS.forEach((k) => {
-          if (typeof res?.[`${k}BadgeVisible`] === "boolean") {
-            next[k] = !!res[`${k}BadgeVisible`];
-          }
+          const badgeVisible = !!res?.[`${k}BadgeVisible`];
+          next[k] = badgeVisible;
         });
 
+        // repostedGhost switch is controlled via FEATURE_BADGE_KEY
         next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
 
         setValues(next);
@@ -178,10 +182,12 @@ export default function HideJobsFilters() {
       let touched = false;
       const delta = {};
 
+      // Switch state is driven by BadgeVisible only
       FILTER_KEYS.forEach((k) => {
-        const key = `${k}BadgeVisible`;
-        if (key in changes) {
-          delta[k] = !!changes[key].newValue;
+        const badgeKey = `${k}BadgeVisible`;
+        if (badgeKey in changes) {
+          const newValue = !!changes[badgeKey].newValue;
+          delta[k] = newValue;
           touched = true;
         }
       });
@@ -221,32 +227,60 @@ export default function HideJobsFilters() {
     return () => chromeApi.storage.onChanged.removeListener(handleStorage);
   }, [chromeApi]);
 
+  // Optional: listen to custom events (tour might broadcast immediate UI state)
+  useEffect(() => {
+    const handleTourEvent = (event) => {
+      if (event.detail) {
+        setValues((prev) => ({ ...prev, ...event.detail }));
+      }
+    };
+    window.addEventListener("hidejobs-filters-changed", handleTourEvent);
+    return () => window.removeEventListener("hidejobs-filters-changed", handleTourEvent);
+  }, []);
+
   const updateValue = (key, checked) => {
     if (PREMIUM_KEYS.has(key) && !isSubscribed) return;
 
+    // Switch reflects badge visibility; when user toggles:
+    //  - set BadgeVisible = checked
+    //  - also set Hidden = checked  (so ON => badge ON + hiding ON; OFF => badge removed + hiding OFF)
     setValues((prev) => ({ ...prev, [key]: checked }));
 
     if (chromeApi) {
-      chromeApi.storage.local.set({ [`${key}BadgeVisible`]: checked });
-      chromeApi.storage.local.set({ [`${key}Hidden`]: checked });
+      const updates = {
+        [`${key}BadgeVisible`]: checked,
+        [`${key}Hidden`]: checked,
+      };
 
       if (key === "dismissed") {
-        chromeApi.storage.local.set({ dismissedBadgeVisible: checked });
+        updates["dismissedBadgeVisible"] = checked; // legacy mirror
       }
 
+      // Special handling for reposted
       if (key === "repostedGhost") {
-        chromeApi.storage.local.set({ [FEATURE_BADGE_KEY]: checked });
-
-        if (!checked) {
-          chromeApi.storage.local.set({ [HIDE_REPOSTED_STATE_KEY]: "false" });
-          toggleHideShowReposted(false);
-          clearRepostedBadgesFromDOM();
-        } else {
-          applyOverlaysFromLocalStorage();
-        }
+        // switch controls the feature flag and the ON state
+        updates[FEATURE_BADGE_KEY] = checked;
+        updates[HIDE_REPOSTED_STATE_KEY] = checked ? "true" : "false";
       }
+
+      chromeApi.storage.local.set(updates, () => {
+        // apply side effects for reposted after storage write
+        if (key === "repostedGhost") {
+          if (checked) {
+            try {
+              applyOverlaysFromLocalStorage();
+            } catch { }
+          } else {
+            try {
+              toggleHideShowReposted(false);
+              clearRepostedBadgesFromDOM();
+            } catch { }
+          }
+        }
+      });
     }
 
+    // Broadcast convenience event for any listeners
     try {
       const detail = { ...values, [key]: checked };
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
@@ -282,7 +316,7 @@ export default function HideJobsFilters() {
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true, help: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true, help: true },
-    { key: "applied", label: "Applied (LinkedIn)", premium: true },
+    { key: "applied", label: "Applied (LinkedIn)", premium: true, tour: true, },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "userText", label: "Keywords", premium: true, help: true },
     { key: "companies", label: "Companies", premium: true },
@@ -337,6 +371,16 @@ export default function HideJobsFilters() {
               <InfoCircleOutlined className={`${disabled ? "text-gray-300" : "text-gray-400"}`} />
             </Tooltip>
           ) : null}
+          {row.tour ? (
+            <Tooltip title="How it works">
+              <Button
+                type="text"
+                size="small"
+                icon={<QuestionCircleFilled className="text-gray-400" />}
+                onClick={() => setTourOpen(true)}
+              />
+            </Tooltip>
+          ) : null}
         </div>
         {rightControl}
       </div>
@@ -347,13 +391,13 @@ export default function HideJobsFilters() {
     <div className="space-y-4">
       {/* Header with Help button to start the tour */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
           <Tooltip title="How it works">
             <Button
               type="text"
               size="small"
-              icon={<QuestionCircleFilled />}
+              icon={<QuestionCircleFilled className="text-gray-400 text-lg" />}
               onClick={() => setTourOpen(true)}
               aria-label="How it works"
             />
@@ -367,10 +411,12 @@ export default function HideJobsFilters() {
       </div>
 
       <div className="rounded-lg border border-gray-200">
+        {/* Free rows */}
         {freeRows.map((row, idx) =>
           renderRow(row, idx === freeRows.length - (premiumRows.length ? 0 : 1))
         )}
 
+        {/* Premium rows */}
         {premiumRows.length > 0 && (
           <div className="relative">
             <div className={!isSubscribed ? "opacity-50 pointer-events-none" : ""}>
@@ -393,6 +439,7 @@ export default function HideJobsFilters() {
 
       {/* Tour overlay */}
       <InteractiveTour open={tourOpen} onClose={() => setTourOpen(false)} />
+      <AppliedLinkedinTour open={tourOpen} onClose={() => setTourOpen(false)} />
     </div>
   );
 }
