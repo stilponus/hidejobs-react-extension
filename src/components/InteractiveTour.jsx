@@ -83,12 +83,17 @@ export default function InteractiveTour({ open, onClose }) {
   const rafRef = useRef();
   const boxRef = useRef(null);
 
-  // Track when our reset is finished; only then can we advance to Step 2.
+  // Only allow advancing after our reset completes
   const resetDoneRef = useRef(false);
+  // Prevent double close if multiple storage events arrive
+  const closedPanelRef = useRef(false);
 
   // Reset to step 1 whenever the tour opens
   useEffect(() => {
-    if (open) setStep(1);
+    if (open) {
+      setStep(1);
+      closedPanelRef.current = false;
+    }
   }, [open]);
 
   // Ensure the panel is open on the Filters view when the tour starts
@@ -116,7 +121,7 @@ export default function InteractiveTour({ open, onClose }) {
     const toSet = {};
     FILTER_KEYS.forEach((k) => {
       toSet[`${k}BadgeVisible`] = false;
-      toSet[`${k}Hidden`] = false;
+      toSet[`${k}Hidden`] = false; // includes dismissedHidden = false
     });
     toSet["badgesCompact"] = false;
 
@@ -126,43 +131,49 @@ export default function InteractiveTour({ open, onClose }) {
         const detail = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
         window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
       } catch { }
-      // arm step-2 progression now that reset completed
+      // Arm progression now that reset completed
       resetDoneRef.current = true;
     });
   }, [open, chromeApi]);
 
-  // Advance Step 1 -> Step 2 ONLY on change event AFTER reset completes
+  // Advance Step 1 -> Step 2 ONLY when user flips dismissedHidden to true DURING this tour.
+  // Also close the panel *right here* (not in a separate effect) to avoid races.
   useEffect(() => {
     if (!open || !chromeApi) return;
 
     const onChange = (changes, area) => {
       if (area !== "local") return;
-      if (!resetDoneRef.current) return; // ignore early/stale values
+      if (!resetDoneRef.current) return;
+
       if ("dismissedHidden" in changes) {
-        const now = !!changes.dismissedHidden.newValue;
-        if (now) setStep(2);
+        const { oldValue, newValue } = changes.dismissedHidden;
+        const was = !!oldValue;
+        const now = !!newValue;
+
+        // Only act on a real false -> true transition (user action after reset)
+        if (!was && now) {
+          setStep(2);
+
+          // Close the panel only because the user turned it on *during* the tour
+          if (!closedPanelRef.current) {
+            closedPanelRef.current = true;
+            chromeApi.storage.local.get(["hidejobs_panel_visible"], (res) => {
+              if (res?.hidejobs_panel_visible) {
+                try {
+                  const evt = new CustomEvent("toggle-hidejobs-panel");
+                  window.dispatchEvent(evt);
+                } catch { }
+                chromeApi.storage.local.set({ hidejobs_panel_visible: false });
+              }
+            });
+          }
+        }
       }
     };
+
     chromeApi.storage.onChanged.addListener(onChange);
     return () => chromeApi.storage.onChanged.removeListener(onChange);
   }, [open, chromeApi]);
-
-  // When we ENTER step 2, close the side panel to floating-button state
-  useEffect(() => {
-    if (!open || !chromeApi) return;
-    if (step !== 2) return;
-
-    chromeApi.storage.local.get(["hidejobs_panel_visible"], (res) => {
-      const currentlyVisible = !!res?.hidejobs_panel_visible;
-      if (currentlyVisible) {
-        try {
-          const evt = new CustomEvent("toggle-hidejobs-panel");
-          window.dispatchEvent(evt);
-        } catch { }
-        chromeApi.storage.local.set({ hidejobs_panel_visible: false });
-      }
-    });
-  }, [open, step, chromeApi]);
 
   // Measure target (depends on current step)
   useEffect(() => {
