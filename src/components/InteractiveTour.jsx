@@ -1,3 +1,4 @@
+// src/components/Tour/InteractiveTour.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
@@ -16,13 +17,10 @@ const FILTER_KEYS = [
   "companies",
 ];
 
-const FEATURE_BADGE_KEY = "reposted_feature_enabled";
-const HIDE_REPOSTED_STATE_KEY = "reposted_hide_state";
-
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -31,13 +29,16 @@ function getPanelShadowRoot() {
   return host?.shadowRoot || null;
 }
 
+/** STEP 1 target: the "Dismissed" row (label + switch) inside Filters panel */
 function findDismissedRow() {
   const root = getPanelShadowRoot();
   if (!root) return null;
 
+  // Preferred hook if present
   const attrTarget = root.querySelector('[data-filter-row="dismissed"]');
   if (attrTarget) return attrTarget;
 
+  // Fallback: find text "Dismissed", then climb to container with an Ant Switch
   const nodes = Array.from(root.querySelectorAll("span, div, p, h2, h3"));
   const labelNode = nodes.find(
     (el) => (el.textContent || "").trim().toLowerCase() === "dismissed"
@@ -52,45 +53,128 @@ function findDismissedRow() {
   return null;
 }
 
+/** STEP 2 target: the Dismissed badge on the right stack (inside shadow root) */
+function findDismissedBadge() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+
+  // If you add this to FilterBadge root: data-badge="dismissed"
+  const byAttr = root.querySelector('[data-badge="dismissed"]');
+  if (byAttr) return byAttr;
+
+  // Compact variant: aria-label starts with "Dismissed"
+  const byAria = root.querySelector('[aria-label^="Dismissed"]');
+  if (byAria) return byAria;
+
+  // Non-compact: any button/role=button containing "Dismissed"
+  const candidates = Array.from(root.querySelectorAll("button, [role='button']"));
+  const byText = candidates.find((el) =>
+    ((el.textContent || "").trim().toLowerCase()).includes("dismissed")
+  );
+  if (byText) return byText;
+
+  return null;
+}
+
 export default function InteractiveTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
+  const [step, setStep] = useState(1);
   const rafRef = useRef();
   const boxRef = useRef(null);
 
+  // Track when our reset is finished; only then can we advance to Step 2.
+  const resetDoneRef = useRef(false);
+
+  // Reset to step 1 whenever the tour opens
+  useEffect(() => {
+    if (open) setStep(1);
+  }, [open]);
+
+  // Ensure the panel is open on the Filters view when the tour starts
   useEffect(() => {
     if (!open || !chromeApi) return;
+    chromeApi.storage.local.set(
+      { hidejobs_panel_view: "filters", hidejobs_panel_visible: true },
+      () => {
+        try {
+          const evt = new CustomEvent("hidejobs-panel-set-view", {
+            detail: { view: "filters" },
+          });
+          window.dispatchEvent(evt);
+        } catch { }
+      }
+    );
+  }, [open, chromeApi]);
+
+  // On open: turn OFF all toggles + compact (and mark reset done when complete)
+  useEffect(() => {
+    if (!open || !chromeApi) return;
+
+    resetDoneRef.current = false;
 
     const toSet = {};
     FILTER_KEYS.forEach((k) => {
       toSet[`${k}BadgeVisible`] = false;
       toSet[`${k}Hidden`] = false;
     });
-    toSet[FEATURE_BADGE_KEY] = false;
-    toSet[HIDE_REPOSTED_STATE_KEY] = "false";
-
     toSet["badgesCompact"] = false;
 
     chromeApi.storage.local.set(toSet, () => {
+      // broadcast so Filters UI updates immediately
       try {
         const detail = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
-        window.dispatchEvent(
-          new CustomEvent("hidejobs-filters-changed", { detail })
-        );
-      } catch {}
+        window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
+      } catch { }
+      // arm step-2 progression now that reset completed
+      resetDoneRef.current = true;
     });
   }, [open, chromeApi]);
 
+  // Advance Step 1 -> Step 2 ONLY on change event AFTER reset completes
+  useEffect(() => {
+    if (!open || !chromeApi) return;
+
+    const onChange = (changes, area) => {
+      if (area !== "local") return;
+      if (!resetDoneRef.current) return; // ignore early/stale values
+      if ("dismissedHidden" in changes) {
+        const now = !!changes.dismissedHidden.newValue;
+        if (now) setStep(2);
+      }
+    };
+    chromeApi.storage.onChanged.addListener(onChange);
+    return () => chromeApi.storage.onChanged.removeListener(onChange);
+  }, [open, chromeApi]);
+
+  // When we ENTER step 2, close the side panel to floating-button state
+  useEffect(() => {
+    if (!open || !chromeApi) return;
+    if (step !== 2) return;
+
+    chromeApi.storage.local.get(["hidejobs_panel_visible"], (res) => {
+      const currentlyVisible = !!res?.hidejobs_panel_visible;
+      if (currentlyVisible) {
+        try {
+          const evt = new CustomEvent("toggle-hidejobs-panel");
+          window.dispatchEvent(evt);
+        } catch { }
+        chromeApi.storage.local.set({ hidejobs_panel_visible: false });
+      }
+    });
+  }, [open, step, chromeApi]);
+
+  // Measure target (depends on current step)
   useEffect(() => {
     if (!open) return;
 
     const measure = () => {
-      const el = findDismissedRow();
+      const el = step === 1 ? findDismissedRow() : findDismissedBadge();
       if (!el) {
         setRect(null);
         return;
       }
-      const r = el.getBoundingClientRect();
+      const r = el.getBoundingClientRect(); // viewport coords
       setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
     };
 
@@ -117,8 +201,9 @@ export default function InteractiveTour({ open, onClose }) {
       window.removeEventListener("resize", onScrollOrResize);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [open]);
+  }, [open, step]);
 
+  // Block interactions outside the hole; allow instruction box; ESC closes
   useEffect(() => {
     if (!open) return;
 
@@ -168,6 +253,8 @@ export default function InteractiveTour({ open, onClose }) {
       }
     };
 
+    const onEsc = (e) => e.key === "Escape" && onClose?.();
+
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("pointerup", onPointer, true);
     window.addEventListener("click", onPointer, true);
@@ -175,6 +262,7 @@ export default function InteractiveTour({ open, onClose }) {
     window.addEventListener("contextmenu", onPointer, true);
     window.addEventListener("wheel", onWheel, { capture: true, passive: false });
     window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keydown", onEsc);
 
     return () => {
       window.removeEventListener("pointerdown", onPointer, true);
@@ -184,15 +272,9 @@ export default function InteractiveTour({ open, onClose }) {
       window.removeEventListener("contextmenu", onPointer, true);
       window.removeEventListener("wheel", onWheel, true);
       window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keydown", onEsc);
     };
-  }, [open, rect]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onEsc = (e) => e.key === "Escape" && onClose?.();
-    window.addEventListener("keydown", onEsc);
-    return () => window.removeEventListener("keydown", onEsc);
-  }, [open, onClose]);
+  }, [open, rect, onClose]);
 
   if (!open) return null;
 
@@ -202,6 +284,12 @@ export default function InteractiveTour({ open, onClose }) {
   const estBoxH = 150;
   const placeBelow =
     hole.y + hole.h + gap + estBoxH <= window.innerHeight || hole.y < estBoxH + gap;
+
+  const stepTitle = step === 1 ? "Step 1" : "Step 2";
+  const stepText =
+    step === 1
+      ? "To start working with filter, switch ON the toggle next to the filter you want to use"
+      : "Placeholder text for now";
 
   return (
     <div
@@ -213,10 +301,10 @@ export default function InteractiveTour({ open, onClose }) {
       }}
       aria-hidden
     >
-      {/* hide tooltips/popovers during tour */}
+      {/* Hide ant tooltips/popovers during the tour */}
       <style>{`.ant-tooltip,.ant-popover{display:none !important;}`}</style>
 
-      {/* mask with transparent hole */}
+      {/* Mask with transparent hole */}
       <svg width="100%" height="100%" style={{ position: "fixed", inset: 0, display: "block" }}>
         <defs>
           <mask id="hj-tour-mask">
@@ -242,7 +330,7 @@ export default function InteractiveTour({ open, onClose }) {
         />
       </svg>
 
-      {/* instruction box */}
+      {/* Instruction box (clickable) */}
       <div
         ref={boxRef}
         style={{
@@ -260,10 +348,10 @@ export default function InteractiveTour({ open, onClose }) {
         }}
       >
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-gray-800">Step 1</div>
+          <div className="text-sm font-semibold text-gray-800">{stepTitle}</div>
           <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
         </div>
-        <div className="mt-1 text-sm text-gray-700">here will be instructions</div>
+        <div className="mt-1 text-sm text-gray-700">{stepText}</div>
       </div>
     </div>
   );
