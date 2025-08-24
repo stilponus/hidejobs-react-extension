@@ -1,3 +1,4 @@
+// src/components/HideJobsFilters.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Switch, Tooltip, Button } from "antd";
 import {
@@ -14,8 +15,8 @@ import {
 } from "./RepostedJobs/repostedDom";
 
 import SubscribeButton from "./SubscribeButton";
-import InteractiveTour from "./Tours//InteractiveTour";
-import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";
+import InteractiveTour from "./Tours/InteractiveTour";           // Dismissed-only tour
+import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";   // Applied (LinkedIn)-only tour
 
 const FILTER_KEYS = [
   "dismissed",
@@ -76,7 +77,9 @@ export default function HideJobsFilters() {
   const [subscriptionStatus, setSubscriptionStatus] = useState("unknown");
   const prevIsSubscribedRef = useRef(false);
 
-  const [tourOpen, setTourOpen] = useState(false);
+  // ✅ Separate states for separate tours
+  const [dismissedTourOpen, setDismissedTourOpen] = useState(false);
+  const [appliedTourOpen, setAppliedTourOpen] = useState(false);
 
   const broadcastFiltersChanged = (nextValues) => {
     try {
@@ -243,7 +246,7 @@ export default function HideJobsFilters() {
 
     // Switch reflects badge visibility; when user toggles:
     //  - set BadgeVisible = checked
-    //  - also set Hidden = checked  (so ON => badge ON + hiding ON; OFF => badge removed + hiding OFF)
+    //  - also set Hidden = checked
     setValues((prev) => ({ ...prev, [key]: checked }));
 
     if (chromeApi) {
@@ -258,13 +261,11 @@ export default function HideJobsFilters() {
 
       // Special handling for reposted
       if (key === "repostedGhost") {
-        // switch controls the feature flag and the ON state
         updates[FEATURE_BADGE_KEY] = checked;
         updates[HIDE_REPOSTED_STATE_KEY] = checked ? "true" : "false";
       }
 
       chromeApi.storage.local.set(updates, () => {
-        // apply side effects for reposted after storage write
         if (key === "repostedGhost") {
           if (checked) {
             try {
@@ -280,7 +281,7 @@ export default function HideJobsFilters() {
       });
     }
 
-    // Broadcast convenience event for any listeners
+    // Broadcast convenience event
     try {
       const detail = { ...values, [key]: checked };
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
@@ -308,15 +309,16 @@ export default function HideJobsFilters() {
     } catch { }
   };
 
+  // ✅ Define rows and which ones have their own tour
   const rows = [
-    { key: "dismissed", label: "Dismissed" },
+    { key: "dismissed", label: "Dismissed", tourKey: "dismissed" }, // Dismissed has its own tour
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
     { key: "repostedGhost", label: "Reposted Jobs", premium: true },
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true, help: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true, help: true },
-    { key: "applied", label: "Applied (LinkedIn)", premium: true, tour: true, },
+    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" }, // Applied-LinkedIn has its own tour
     { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "userText", label: "Keywords", premium: true, help: true },
     { key: "companies", label: "Companies", premium: true },
@@ -357,6 +359,11 @@ export default function HideJobsFilters() {
         />
       );
 
+    const openTourForRow = () => {
+      if (row.tourKey === "dismissed") setDismissedTourOpen(true);
+      else if (row.tourKey === "applied") setAppliedTourOpen(true);
+    };
+
     return (
       <div
         key={row.key}
@@ -366,18 +373,23 @@ export default function HideJobsFilters() {
         <div className="flex items-center gap-2 min-w-0">
           {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
           <span className={`truncate ${disabled ? "text-gray-400" : ""}`}>{row.label}</span>
+
+          {/* Optional generic help for some rows */}
           {row.help ? (
             <Tooltip title={disabled ? "Subscribe to enable" : "Info"}>
               <InfoCircleOutlined className={`${disabled ? "text-gray-300" : "text-gray-400"}`} />
             </Tooltip>
           ) : null}
-          {row.tour ? (
+
+          {/* ✅ Row-specific tour question mark */}
+          {row.tourKey ? (
             <Tooltip title="How it works">
               <Button
                 type="text"
                 size="small"
                 icon={<QuestionCircleFilled className="text-gray-400" />}
-                onClick={() => setTourOpen(true)}
+                onClick={openTourForRow}
+                disabled={row.premium && !isSubscribed}
               />
             </Tooltip>
           ) : null}
@@ -389,19 +401,10 @@ export default function HideJobsFilters() {
 
   return (
     <div className="space-y-4">
-      {/* Header with Help button to start the tour */}
+      {/* Header — removed generic 'How it works' button to avoid confusion */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
           <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
-          <Tooltip title="How it works">
-            <Button
-              type="text"
-              size="small"
-              icon={<QuestionCircleFilled className="text-gray-400 text-lg" />}
-              onClick={() => setTourOpen(true)}
-              aria-label="How it works"
-            />
-          </Tooltip>
         </div>
 
         <div className="flex items-center gap-2">
@@ -437,9 +440,9 @@ export default function HideJobsFilters() {
 
       {!isSubscribed && <SubscribeButton />}
 
-      {/* Tour overlay */}
-      <InteractiveTour open={tourOpen} onClose={() => setTourOpen(false)} />
-      <AppliedLinkedinTour open={tourOpen} onClose={() => setTourOpen(false)} />
+      {/* ✅ Separate tour overlays */}
+      <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
+      <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
     </div>
   );
 }

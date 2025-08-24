@@ -1,3 +1,4 @@
+// src/components/Tours/InteractiveTour.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
