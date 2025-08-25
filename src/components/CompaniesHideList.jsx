@@ -68,20 +68,33 @@ export default function CompaniesHideList() {
       return;
     }
 
-    chromeApi.storage.local.get(["isSubscribed", "companiesBadgeVisible", "indeedCompaniesBadgeVisible"], (res) => {
-      setIsSubscribed(!!res?.isSubscribed);
-      // unify initial state across both LinkedIn + Indeed company toggles
-      const initialOn = !!res?.companiesBadgeVisible || !!res?.indeedCompaniesBadgeVisible;
-      setCompaniesFeatureOn(initialOn);
-      // force-sync both keys to the unified value so everything starts consistent
-      chromeApi.storage.local.set({
-        companiesBadgeVisible: initialOn,
-        companiesHidden: initialOn,
-        indeedCompaniesBadgeVisible: initialOn,
-        indeedCompaniesHidden: initialOn,
-      });
-      setSubscriptionLoading(false);
-    });
+    // ⬇️ Include Glassdoor in initial read + unification
+    chromeApi.storage.local.get(
+      ["isSubscribed", "companiesBadgeVisible", "indeedCompaniesBadgeVisible", "glassdoorCompaniesBadgeVisible"],
+      (res) => {
+        setIsSubscribed(!!res?.isSubscribed);
+
+        // unify initial state across LinkedIn + Indeed + Glassdoor company toggles
+        const initialOn =
+          !!res?.companiesBadgeVisible ||
+          !!res?.indeedCompaniesBadgeVisible ||
+          !!res?.glassdoorCompaniesBadgeVisible;
+
+        setCompaniesFeatureOn(initialOn);
+
+        // force-sync all three keys so everything starts consistent
+        chromeApi.storage.local.set({
+          companiesBadgeVisible: initialOn,
+          companiesHidden: initialOn,
+          indeedCompaniesBadgeVisible: initialOn,
+          indeedCompaniesHidden: initialOn,
+          glassdoorCompaniesBadgeVisible: initialOn, // NEW
+          glassdoorCompaniesHidden: initialOn,       // NEW
+        });
+
+        setSubscriptionLoading(false);
+      }
+    );
 
     chrome.runtime?.sendMessage?.(
       { type: "get-subscription-status", forceRefresh: true },
@@ -94,20 +107,30 @@ export default function CompaniesHideList() {
       if (area !== "local") return;
       if ("isSubscribed" in changes) setIsSubscribed(!!changes.isSubscribed.newValue);
 
-      // keep master switch mirrored with EITHER toggle and immediately sync the counterpart
-      if ("companiesBadgeVisible" in changes || "indeedCompaniesBadgeVisible" in changes) {
-        chromeApi.storage.local.get(["companiesBadgeVisible", "indeedCompaniesBadgeVisible"], (r) => {
-          const li = !!r?.companiesBadgeVisible;
-          const ind = !!r?.indeedCompaniesBadgeVisible;
-          const next = li || ind;
-          setCompaniesFeatureOn(next);
-          chromeApi.storage.local.set({
-            companiesBadgeVisible: next,
-            companiesHidden: next,
-            indeedCompaniesBadgeVisible: next,
-            indeedCompaniesHidden: next,
-          });
-        });
+      // keep master switch mirrored with ANY of the three toggles and immediately sync all three
+      if (
+        "companiesBadgeVisible" in changes ||
+        "indeedCompaniesBadgeVisible" in changes ||
+        "glassdoorCompaniesBadgeVisible" in changes // NEW
+      ) {
+        chromeApi.storage.local.get(
+          ["companiesBadgeVisible", "indeedCompaniesBadgeVisible", "glassdoorCompaniesBadgeVisible"], // NEW
+          (r) => {
+            const li = !!r?.companiesBadgeVisible;
+            const ind = !!r?.indeedCompaniesBadgeVisible;
+            const gd = !!r?.glassdoorCompaniesBadgeVisible; // NEW
+            const next = li || ind || gd;
+            setCompaniesFeatureOn(next);
+            chromeApi.storage.local.set({
+              companiesBadgeVisible: next,
+              companiesHidden: next,
+              indeedCompaniesBadgeVisible: next,
+              indeedCompaniesHidden: next,
+              glassdoorCompaniesBadgeVisible: next, // NEW
+              glassdoorCompaniesHidden: next,       // NEW
+            });
+          }
+        );
       }
     };
     chromeApi.storage.onChanged.addListener(onStore);
@@ -254,17 +277,20 @@ export default function CompaniesHideList() {
   const onCompaniesToggle = (checked) => {
     if (!isSubscribed) return;
     setCompaniesFeatureOn(checked);
+
+    // ⬇️ Master toggle syncs all three: LinkedIn, Indeed, Glassdoor
     chrome?.storage?.local?.set({
       companiesBadgeVisible: checked,
       companiesHidden: checked,
-      // sync Indeed Companies too
       indeedCompaniesBadgeVisible: checked,
       indeedCompaniesHidden: checked,
+      glassdoorCompaniesBadgeVisible: checked, // NEW
+      glassdoorCompaniesHidden: checked,       // NEW
     });
 
     try {
       const evt = new CustomEvent("hidejobs-filters-changed", {
-        detail: { companies: checked, indeedCompanies: checked },
+        detail: { companies: checked, indeedCompanies: checked, glassdoorCompanies: checked }, // include GD mirror
       });
       window.dispatchEvent(evt);
     } catch { }

@@ -1,3 +1,4 @@
+// public/content-companies-glassdoor.js
 /************************************************************
  * HideJobs – Glassdoor "Companies" helper (overlay + hide by company)
  *
@@ -5,7 +6,7 @@
  * This script only handles overlay UI and actual job card hiding/unhiding.
  *
  * Shared list / misc:
- *   - hiddenCompanies         : string[] (shared company list across sites)
+ *   - hiddenCompanies         : string[] (shared company list)
  *   - overlaidJobIds          : string[] (cards currently showing the overlay)
  *
  * We support BOTH old and new per-site keys so it works with either UI wiring:
@@ -21,14 +22,14 @@
  *     - glassdoorCompaniesHiddenCount
  *     - companiesHiddenCount
  *
- * Page scope: Glassdoor job list/search pages only
+ * Page scope: Glassdoor job list pages only
  ************************************************************/
 
 (() => {
   console.log("[HideJobs] glassdoor companies logic loaded:", location.href);
 
   /* ──────────────────────────────────────────────────────────
-   * Key helpers (support old & new keys)
+   * Keys + helpers (support old & new keys)
    * ────────────────────────────────────────────────────────── */
   const KEYS = {
     badgeVisible: ["glassdoorCompaniesBadgeVisible", "companiesBadgeVisible"],
@@ -65,63 +66,68 @@
     };
   }
 
-  function cleanCompanyName(raw) {
-    if (!raw) return null;
-    let name = String(raw).trim();
+  function cleanCompanyName(rawName) {
+    if (!rawName) return null;
+    let name = rawName.trim();
     if (name.includes(" · ")) name = name.split(" · ")[0].trim();
     name = name.replace(/\(.*?\)/g, "").trim();
     return name || null;
   }
 
   /* ──────────────────────────────────────────────────────────
-   * Page detection – allow Glassdoor job pages, block others
+   * Page detection – allow-list for Glassdoor job list pages
    * ────────────────────────────────────────────────────────── */
   function isGlassdoorJobPage(href = location.href) {
     const url = new URL(href);
     const host = url.hostname.toLowerCase();
     const path = url.pathname.toLowerCase();
+
     if (!host.includes("glassdoor.")) return false;
 
-    // Filter obvious non-job sections
-    const blocked = [
-      "/overview","/benefits","/photos","/reviews",
-      "/faq","/interview","/salary","/salaries",
-      "/employers","/employer","/compare","/insights",
-      "/blog","/community","/about","/help","/partners","/profile",
+    const blockedPaths = [
+      "/employers",
+      "/about",
+      "/help",
+      "/legal",
+      "/community",
+      "/profile",
+      "/account",
+      "/survey",
+      "/career-advice",
+      "/salaries",
+      "/reviews",
+      "/photos",
     ];
-    if (blocked.some(p => path.startsWith(p))) return false;
+    if (blockedPaths.some((p) => path.startsWith(p))) return false;
 
-    // Treat other pages on glassdoor.* as list/search pages (SPA variations abound)
+    const blockedHosts = new Set([
+      "employers.glassdoor.com",
+      "help.glassdoor.com",
+    ]);
+    if (blockedHosts.has(host)) return false;
+
     return true;
   }
 
   /* ──────────────────────────────────────────────────────────
-   * DOM helpers – find cards / ids / company element
+   * DOM helpers – find card/company elements
    * ────────────────────────────────────────────────────────── */
   function getJobCards() {
-    // Common variants we’ve seen on GD
-    return document.querySelectorAll('li[data-test="jobListing"][data-jobid], div[data-test="jobListing"][data-jobid]');
+    return document.querySelectorAll('li[data-test="jobListing"][data-jobid]');
   }
-  function getJobId(card) {
-    return card.getAttribute("data-jobid") || null;
+
+  function getJobId(jobCardLi) {
+    return jobCardLi.getAttribute('data-jobid');
   }
-  function getCompanyElement(card) {
-    // Try common selectors first
-    return (
-      card.querySelector('[data-test="employerName"]') ||
-      card.querySelector('[id^="job-employer-"] span') ||
-      card.querySelector('[data-test="job-info"] [data-test="employer-name"]') ||
-      null
-    );
+
+  function getCompanyNameElement(jobCardLi) {
+    const employerContainer = jobCardLi.querySelector('[id^="job-employer-"]');
+    if (!employerContainer) return null;
+    return employerContainer.querySelector('span');
   }
-  function getStarRatingElement(card) {
-    // Glassdoor often uses star containers with role/img or svg; keep flexible
-    return (
-      card.querySelector('[data-test="rating"]') ||
-      card.querySelector('[aria-label*="star"]') ||
-      card.querySelector('[class*="Rating"]') ||
-      null
-    );
+
+  function getRatingElement(jobCardLi) {
+    return jobCardLi.querySelector('[class*="rating-single-star"]');
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -131,7 +137,7 @@
   let isOn = false;         // from either *CompaniesHidden key
   let hiddenCount = 0;
   const countedIds = new Set();
-  let listObserver = null;
+  let jobListObserver = null;
   let lastUrl = location.href;
 
   /* ──────────────────────────────────────────────────────────
@@ -143,9 +149,18 @@
     style.id = "hidejobs-glassdoor-companies-style";
     style.textContent = `
       .hidejobs-hidden-by-company { display: none !important; }
-      .hidejobs-footer-icon { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+
+      .hidejobs-footer-icon { 
+        position: relative; 
+        display: inline-flex; 
+        align-items: center; 
+        cursor: pointer; 
+        margin-left: 8px;
+        z-index: 2;
+        pointer-events: auto;
+      }
+
       .hidejobs-overlay { transition: opacity .3s ease; }
-      a:hover { text-decoration: none !important; } /* avoid underline flicker under overlay */
     `;
     document.head.appendChild(style);
   })();
@@ -153,79 +168,49 @@
   /* ──────────────────────────────────────────────────────────
    * Icon + overlay injection (eye managed by toggle, not badge)
    * ────────────────────────────────────────────────────────── */
-  function injectFooterIcon(card) {
-    const jobId = getJobId(card);
+  function injectFooterIcon(jobCardLi) {
+    const jobId = getJobId(jobCardLi);
     if (!jobId) return;
-    if (card.querySelector(".hidejobs-footer-icon")) return;
 
-    const companyEl = getCompanyElement(card);
+    if (jobCardLi.querySelector(".hidejobs-footer-icon")) return;
+
+    const companyEl = getCompanyNameElement(jobCardLi);
     if (!companyEl) return;
 
-    // Prefer to sit near rating when present, otherwise after company name
-    const ratingEl = getStarRatingElement(card);
-    const insertTarget = ratingEl || companyEl;
+    const footerIcon = document.createElement("span");
+    footerIcon.className = "hidejobs-footer-icon";
 
-    const icon = document.createElement("span");
-    icon.className = "hidejobs-footer-icon";
-    icon.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
-           fill="#28507c" class="bi bi-eye-slash-fill" viewBox="0 0 16 16"
-           style="cursor:pointer;transition:fill .3s;position:absolute;left:10px;">
-        <path d="m10.79 12.912-1.614-1.615a3.5 3.5 0 0 1-4.474-4.474l-2.06-2.06C.938 6.278 0 8 0 8s3 5.5 8 5.5a7 7 0 0 0 2.79-.588M5.21 3.088A7 7 0 0 1 8 2.5c5 0 8 5.5 8 5.5s-.939 1.721-2.641 3.238l-2.062-2.062a3.5 3.5 0 0 0-4.474-4.474z"></path>
-        <path d="M5.525 7.646a2.5 2.5 0 0 0 2.829 2.829zm4.95.708-2.829-2.83a2.5 2.5 0 0 1 2.829 2.829zm3.171 6-12-12 .708-.708 12 12z"></path>
+    footerIcon.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg"
+           width="18" height="18"
+           fill="#28507c"
+           class="bi bi-eye-slash-fill"
+           viewBox="0 0 16 16"
+           style="cursor:pointer;transition:fill .3s ease;">
+        <path d="m10.79 12.912-1.614-1.615a3.5 3.5 
+                 0 0 1-4.474-4.474l-2.06-2.06C.938 
+                 6.278 0 8 0 8s3 5.5 8 
+                 5.5a7 7 0 0 0 
+                 2.79-.588M5.21 3.088A7 7 0 0 
+                 1 8 2.5c5 0 8 5.5 8 
+                 5.5s-.939 1.721-2.641 
+                 3.238l-2.062-2.062a3.5 3.5 0 
+                 0 0-4.474-4.474z"></path>
+        <path d="M5.525 7.646a2.5 2.5 0 
+                 0 0 2.829 2.829zm4.95.708-2.829-2.83a2.5 
+                 2.5 0 0 1 2.829 2.829zm3.171 
+                 6-12-12 .708-.708 12 12z"></path>
       </svg>
     `;
 
-    // Tooltip
-    const hover = document.createElement("div");
-    hover.textContent = "Mark to Hide";
-    Object.assign(hover.style, {
-      display: "none",
-      color: "#fff",
-      padding: "4px 7px",
-      backgroundColor: "grey",
-      borderRadius: "5px",
-      position: "absolute",
-      top: "-27px",
-      left: "50%",
-      transform: "translateX(-15%)",
-      fontSize: "10px",
-      zIndex: "999",
-      transition: "opacity .3s ease",
-      opacity: "0",
-      whiteSpace: "nowrap",
-    });
-    const triangle = document.createElement("div");
-    Object.assign(triangle.style, {
-      position: "absolute",
-      top: "100%",
-      left: "30%",
-      transform: "translateX(-50%)",
-      borderWidth: "5px",
-      borderStyle: "solid",
-      borderColor: "grey transparent transparent transparent",
-    });
-    hover.appendChild(triangle);
+    const svgEl = footerIcon.querySelector("svg");
+    footerIcon.addEventListener("mouseenter", () => (svgEl.style.fill = "#d40048"));
+    footerIcon.addEventListener("mouseleave", () => (svgEl.style.fill = "#28507c"));
 
-    let t;
-    icon.addEventListener("mouseenter", () => {
-      icon.querySelector("svg").style.fill = "#d40048";
-      t = setTimeout(() => {
-        hover.style.display = "block";
-        requestAnimationFrame(() => (hover.style.opacity = "1"));
-      }, 700);
-    });
-    icon.addEventListener("mouseleave", () => {
-      icon.querySelector("svg").style.fill = "#28507c";
-      clearTimeout(t);
-      hover.style.opacity = "0";
-      setTimeout(() => (hover.style.display = "none"), 300);
-    });
-
-    icon.addEventListener("click", (e) => {
+    footerIcon.addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
-      showOverlay(card, jobId);
+      showOverlay(jobCardLi, jobId);
       chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
         const arr = res?.[KEYS.overlaid] || [];
         if (!arr.includes(jobId)) {
@@ -235,18 +220,20 @@
       });
     });
 
-    icon.appendChild(hover);
-    insertTarget.insertAdjacentElement("afterend", icon);
+    // Insert after rating or company name
+    const ratingEl = getRatingElement(jobCardLi);
+    const insertTarget = ratingEl || companyEl;
+    insertTarget.insertAdjacentElement("afterend", footerIcon);
   }
 
   /* ──────────────────────────────────────────────────────────
    * Overlay on job card
    * ────────────────────────────────────────────────────────── */
-  function showOverlay(card, jobId) {
-    if (card.querySelector(".hidejobs-overlay")) return;
+  function showOverlay(jobCardLi, jobId) {
+    if (jobCardLi.querySelector(".hidejobs-overlay")) return;
 
-    card.style.pointerEvents = "none";
-    const anchorsInside = card.querySelectorAll("a");
+    jobCardLi.style.pointerEvents = "none";
+    const anchorsInside = jobCardLi.querySelectorAll("a");
     anchorsInside.forEach((a) => (a.style.pointerEvents = "none"));
 
     const overlay = document.createElement("div");
@@ -262,12 +249,12 @@
       display: "flex",
       justifyContent: "center",
       alignItems: "center",
-      zIndex: "10",
+      zIndex: "3",
       transition: "background-color .3s ease, backdrop-filter .3s ease, opacity .3s ease",
       borderBottom: "1px solid #e8e8e8",
+      borderRadius: "8px",
       pointerEvents: "auto",
       opacity: "0",
-      borderRadius: "8px",
     });
 
     requestAnimationFrame(() => {
@@ -285,7 +272,17 @@
 
     overlay.addEventListener("click", (e) => {
       if (!e.target.closest(".hidejobs-message-button") && !e.target.closest(".hidejobs-close-button")) {
-        closeOverlay(overlay, card, jobId);
+        overlay.style.opacity = "0";
+        setTimeout(() => {
+          overlay.remove();
+          jobCardLi.style.pointerEvents = "";
+          anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
+          chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+            let arr = res?.[KEYS.overlaid] || [];
+            arr = arr.filter((id) => id !== jobId);
+            chrome.storage.local.set({ [KEYS.overlaid]: arr });
+          });
+        }, 300);
       }
     });
 
@@ -321,7 +318,17 @@
     closeButton.addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
-      closeOverlay(overlay, card, jobId);
+      overlay.style.opacity = "0";
+      setTimeout(() => {
+        overlay.remove();
+        jobCardLi.style.pointerEvents = "";
+        anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
+        chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+          let arr = res?.[KEYS.overlaid] || [];
+          arr = arr.filter((id) => id !== jobId);
+          chrome.storage.local.set({ [KEYS.overlaid]: arr });
+        });
+      }, 300);
     });
 
     // "Hide Company" button
@@ -339,6 +346,7 @@
       transition: "width .3s ease, opacity .3s ease",
       margin: "0 15px",
       border: "none",
+      outline: "none",
     });
 
     messageButton.addEventListener("click", (e) => {
@@ -354,7 +362,7 @@
       overlay.style.opacity = "0";
       setTimeout(() => {
         overlay.remove();
-        card.style.pointerEvents = "";
+        jobCardLi.style.pointerEvents = "";
         anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
 
         chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
@@ -363,16 +371,16 @@
           chrome.storage.local.set({ [KEYS.overlaid]: arr });
         });
 
-        const compEl = getCompanyElement(card);
+        jobCardLi.classList.add("hidejobs-hidden-by-company");
+
+        const compEl = getCompanyNameElement(jobCardLi);
         const cName = compEl ? cleanCompanyName(compEl.textContent) : null;
-
-        // Hide this card immediately
-        card.classList.add("hidejobs-hidden-by-company");
-
         if (cName) {
           chrome?.storage?.local?.get([KEYS.companies], (res) => {
             const hiddenCompanies = res?.[KEYS.companies] || [];
-            if (!hiddenCompanies.includes(cName)) hiddenCompanies.push(cName);
+            if (!hiddenCompanies.includes(cName)) {
+              hiddenCompanies.push(cName);
+            }
             chrome.storage.local.set({ [KEYS.companies]: hiddenCompanies }, () => {
               hideJobsByCompany(); // recount + apply immediately
               chrome?.runtime?.sendMessage?.({ action: "addToHideList", companyName: cName });
@@ -382,21 +390,21 @@
       }, 300);
     });
 
-    // Button widths (company vs hover label)
-    const compEl = getCompanyElement(card);
+    // Button text widths (company vs hover label)
+    const compEl = getCompanyNameElement(jobCardLi);
     const cName = compEl ? cleanCompanyName(compEl.textContent) : "this company";
     const hoverTextContent = "Hide Company";
 
     const tmp = document.createElement("span");
     Object.assign(tmp.style, { visibility: "hidden", position: "absolute", whiteSpace: "nowrap", fontSize: "14px" });
-    document.body.appendChild(tmp);
     tmp.textContent = cName;
-    const wCompany = tmp.offsetWidth + 40;
+    document.body.appendChild(tmp);
+    const companyTextWidth = tmp.offsetWidth + 40;
     tmp.textContent = hoverTextContent;
-    const wHover = tmp.offsetWidth + 60;
+    const hoverTextWidth = tmp.offsetWidth + 60;
     document.body.removeChild(tmp);
 
-    messageButton.style.width = `${wCompany}px`;
+    messageButton.style.width = `${companyTextWidth}px`;
 
     const companyText = document.createElement("span");
     companyText.textContent = cName;
@@ -404,7 +412,7 @@
       transition: "opacity .3s ease",
       opacity: "1",
       zIndex: "2",
-      fontSize: ".875rem",
+      fontSize: "0.875rem",
       whiteSpace: "nowrap",
       overflow: "hidden",
       textOverflow: "ellipsis",
@@ -439,7 +447,7 @@
       transition: "opacity .3s ease",
       zIndex: "3",
       fontWeight: "600",
-      fontSize: "16px",
+      fontSize: "0.95rem",
     });
     messageButton.appendChild(hoverText);
 
@@ -447,36 +455,20 @@
       curtain.style.transform = "translateX(0)";
       companyText.style.opacity = "0";
       hoverText.style.opacity = "1";
-      messageButton.style.width = `${wHover}px`;
+      messageButton.style.width = `${hoverTextWidth}px`;
     });
     messageButton.addEventListener("mouseleave", () => {
       curtain.style.transform = "translateX(100%)";
       hoverText.style.opacity = "0";
-      messageButton.style.width = `${wCompany}px`;
+      messageButton.style.width = `${companyTextWidth}px`;
       setTimeout(() => (companyText.style.opacity = "1"), 300);
     });
 
     overlay.appendChild(messageButton);
     overlay.appendChild(closeButton);
 
-    card.style.position = "relative";
-    card.appendChild(overlay);
-  }
-
-  function closeOverlay(overlay, card, jobId) {
-    overlay.style.transition = "opacity .3s ease";
-    overlay.style.opacity = "0";
-    setTimeout(() => {
-      overlay.remove();
-      card.style.pointerEvents = "";
-      const anchorsInside = card.querySelectorAll("a");
-      anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
-      chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
-        let arr = res?.[KEYS.overlaid] || [];
-        arr = arr.filter((id) => id !== jobId);
-        chrome.storage.local.set({ [KEYS.overlaid]: arr });
-      });
-    }, 300);
+    jobCardLi.style.position = "relative";
+    jobCardLi.appendChild(overlay);
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -489,6 +481,7 @@
 
   function hideJobsByCompany() {
     if (!isOn) {
+      // If the toggle is OFF, keep everything visible.
       restoreHiddenJobs();
       hiddenCount = 0;
       countedIds.clear();
@@ -498,23 +491,25 @@
 
     chrome?.storage?.local?.get([KEYS.companies], (res) => {
       const hiddenCompanies = res?.[KEYS.companies] || [];
-      const cards = getJobCards();
 
+      const jobCards = getJobCards();
       hiddenCount = 0;
       countedIds.clear();
 
-      cards.forEach((card) => {
-        const compEl = getCompanyElement(card);
+      jobCards.forEach((jobCardLi) => {
+        const compEl = getCompanyNameElement(jobCardLi);
         const cName = compEl ? cleanCompanyName(compEl.textContent) : "";
+
         if (hiddenCompanies.includes(cName)) {
-          card.classList.add("hidejobs-hidden-by-company");
-          const id = getJobId(card);
+          jobCardLi.classList.add("hidejobs-hidden-by-company");
+
+          const id = getJobId(jobCardLi) || "";
           if (id && !countedIds.has(id)) {
             countedIds.add(id);
             hiddenCount++;
           }
         } else {
-          card.classList.remove("hidejobs-hidden-by-company");
+          jobCardLi.classList.remove("hidejobs-hidden-by-company");
         }
       });
 
@@ -523,12 +518,13 @@
   }
 
   function restoreHiddenJobs() {
-    const cards = getJobCards();
-    cards.forEach((card) => {
-      card.classList.remove("hidejobs-hidden-by-company");
-      card.style.pointerEvents = "";
-      card.querySelectorAll("a").forEach((a) => (a.style.pointerEvents = ""));
+    const jobCards = getJobCards();
+    jobCards.forEach((jobCardLi) => {
+      jobCardLi.style.pointerEvents = "";
+      jobCardLi.querySelectorAll("a").forEach((a) => (a.style.pointerEvents = ""));
+      jobCardLi.classList.remove("hidejobs-hidden-by-company");
     });
+
     hiddenCount = 0;
     countedIds.clear();
     writeCount();
@@ -539,27 +535,28 @@
    * ────────────────────────────────────────────────────────── */
   function removeAllOverlays() {
     chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
-      const overlaidIds = res?.[KEYS.overlaid] || [];
-      const cards = getJobCards();
-      cards.forEach((card) => {
-        const id = getJobId(card);
-        if (!id || !overlaidIds.includes(id)) return;
-        const overlay = card.querySelector(".hidejobs-overlay");
+      const overlaidJobIds = res?.[KEYS.overlaid] || [];
+      const jobCards = getJobCards();
+      jobCards.forEach((jobCardLi) => {
+        const jobId = getJobId(jobCardLi);
+        if (!jobId || !overlaidJobIds.includes(jobId)) return;
+        const overlay = jobCardLi.querySelector(".hidejobs-overlay");
         if (overlay) overlay.remove();
-        card.style.pointerEvents = "";
-        card.querySelectorAll("a").forEach((a) => (a.style.pointerEvents = ""));
+        jobCardLi.style.pointerEvents = "";
+        const anchorsInside = jobCardLi.querySelectorAll("a");
+        anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
       });
     });
   }
 
   function reapplyOverlays() {
     chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
-      const overlaidIds = res?.[KEYS.overlaid] || [];
-      const cards = getJobCards();
-      cards.forEach((card) => {
-        const id = getJobId(card);
-        if (id && overlaidIds.includes(id)) {
-          showOverlay(card, id);
+      const overlaidJobIds = res?.[KEYS.overlaid] || [];
+      const jobCards = getJobCards();
+      jobCards.forEach((jobCardLi) => {
+        const jobId = getJobId(jobCardLi);
+        if (jobId && overlaidJobIds.includes(jobId)) {
+          showOverlay(jobCardLi, jobId);
         }
       });
     });
@@ -575,43 +572,40 @@
   const ensureInjected = debounce(() => {
     if (!badgeVisible || !isGlassdoorJobPage()) return;
 
+    // The EYE icon/overlay may be used regardless of ON/OFF; hiding only occurs when isOn=true.
     chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
-      const overlaidIds = res?.[KEYS.overlaid] || [];
-      const cards = getJobCards();
-
-      cards.forEach((card) => {
-        const id = getJobId(card);
-        if (!id) return;
-        if (overlaidIds.includes(id)) showOverlay(card, id);
-        injectFooterIcon(card);
+      const overlaidJobIds = res?.[KEYS.overlaid] || [];
+      const jobCards = getJobCards();
+      jobCards.forEach((jobCardLi) => {
+        const jobId = getJobId(jobCardLi);
+        if (!jobId) return;
+        if (overlaidJobIds.includes(jobId)) {
+          showOverlay(jobCardLi, jobId);
+        }
+        injectFooterIcon(jobCardLi);
       });
     });
 
+    // Apply/clear hidden state according to toggle
     if (isOn) hideJobsByCompany();
     else restoreHiddenJobs();
-  }, 60);
+  }, 100);
 
-  function observeJobList() {
+  function observeJobListContainer() {
     if (!badgeVisible) return;
-    if (listObserver) return;
-
-    const root =
-      document.querySelector('[data-test="job-feed"]') ||
-      document.querySelector('[data-test="JobsList"]') ||
-      document.querySelector('[aria-label="Jobs List"]') ||
-      document.body;
-
-    listObserver = new MutationObserver(() => ensureInjected());
-    listObserver.observe(root, { childList: true, subtree: true });
+    if (jobListObserver) return;
+    const mainContainer = document.body;
+    jobListObserver = new MutationObserver(() => ensureInjected());
+    jobListObserver.observe(mainContainer, { childList: true, subtree: true });
 
     // initial pass
     ensureInjected();
   }
 
-  function unobserveJobList() {
-    if (listObserver) {
-      listObserver.disconnect();
-      listObserver = null;
+  function unobserveJobListContainer() {
+    if (jobListObserver) {
+      jobListObserver.disconnect();
+      jobListObserver = null;
     }
   }
 
@@ -623,7 +617,7 @@
       restoreHiddenJobs();
       removeAllOverlays();
       removeFooterIcons();
-      unobserveJobList();
+      unobserveJobListContainer();
       return;
     }
 
@@ -637,19 +631,19 @@
         // Toggle ON/OFF
         isOn = getFirstBool(res, KEYS.hidden, false);
 
-        // Count (we’ll recompute anyway, but keep storage in sync)
+        // Count (we'll recompute anyway, but keep storage in sync)
         const countV = getFirst(res, KEYS.count, 0);
         hiddenCount = Number(countV || 0);
 
         if (badgeVisible) {
-          observeJobList();
+          observeJobListContainer();
           ensureInjected();
           reapplyOverlays();
         } else {
           restoreHiddenJobs();
           removeAllOverlays();
           removeFooterIcons();
-          unobserveJobList();
+          unobserveJobListContainer();
         }
 
         // keep both counts in sync
@@ -693,19 +687,56 @@
       restoreHiddenJobs();
       removeAllOverlays();
       removeFooterIcons();
-      unobserveJobList();
+      unobserveJobListContainer();
       return;
     }
 
     if (badgeVisible) {
       ensureInjected();
-      observeJobList();
+      observeJobListContainer();
       reapplyOverlays();
     } else {
       restoreHiddenJobs();
       removeAllOverlays();
       removeFooterIcons();
-      unobserveJobList();
+      unobserveJobListContainer();
+    }
+  });
+
+  /* ──────────────────────────────────────────────────────────
+   * Message handling for unhiding specific companies
+   * ────────────────────────────────────────────────────────── */
+  chrome?.runtime?.onMessage?.addListener((message, sender, sendResponse) => {
+    if (message?.action === "REMOVE_FROM_HIDELIST" || message?.action === "UNHIDE_JOB_BY_COMPANY") {
+      // Immediately unhide jobs from this specific company
+      const companyName = message.companyName;
+
+      // Find and unhide jobs from this company right away
+      const jobCards = getJobCards();
+      jobCards.forEach((jobCardLi) => {
+        const compEl = getCompanyNameElement(jobCardLi);
+        const company = compEl ? cleanCompanyName(compEl.textContent) : "";
+        if (company === companyName) {
+          jobCardLi.classList.remove("hidejobs-hidden-by-company");
+          jobCardLi.style.pointerEvents = "";
+          const anchorsInside = jobCardLi.querySelectorAll("a");
+          anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
+        }
+      });
+
+      // Update storage (this will be handled by your React component, but ensure consistency)
+      chrome?.storage?.local?.get([KEYS.companies], (res) => {
+        const arr = (res?.[KEYS.companies] || []).filter((nm) => nm !== companyName);
+        hiddenCount = 0;
+        countedIds.clear();
+        chrome?.storage?.local?.set({ [KEYS.companies]: arr }, () => {
+          // Recount remaining hidden jobs
+          hideJobsByCompany();
+        });
+      });
+
+      sendResponse?.({ status: "success" });
+      return true;
     }
   });
 
@@ -723,21 +754,4 @@
    * Entry
    * ────────────────────────────────────────────────────────── */
   window.addEventListener("load", applyStoredState);
-
-  /* ──────────────────────────────────────────────────────────
-   * External messages (no reset handler on purpose)
-   * ────────────────────────────────────────────────────────── */
-  chrome?.runtime?.onMessage?.addListener((message, sender, sendResponse) => {
-    if (message?.action === "REMOVE_FROM_HIDELIST" || message?.action === "UNHIDE_JOB_BY_COMPANY") {
-      const companyName = message.companyName;
-      chrome?.storage?.local?.get([KEYS.companies], (res) => {
-        const arr = (res?.[KEYS.companies] || []).filter((nm) => nm !== companyName);
-        chrome?.storage?.local?.set({ [KEYS.companies]: arr }, () => {
-          hideJobsByCompany();
-          sendResponse?.({ status: "success" });
-        });
-      });
-      return true; // async
-    }
-  });
 })();

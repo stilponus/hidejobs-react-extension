@@ -15,15 +15,16 @@ import {
 } from "./RepostedJobs/repostedDom";
 
 import SubscribeButton from "./SubscribeButton";
-import InteractiveTour from "./Tours/InteractiveTour";           // Dismissed-only tour
-import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";   // Applied (LinkedIn)-only tour
-import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";   // Companies tour (shared UX)
+import InteractiveTour from "./Tours/InteractiveTour";
+import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";
+import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";
 
 /* ─────────────────────────────────────────────────────────────
-   IMPORTANT:
-   - LinkedIn Companies feature uses storage key prefix: "companies"
-   - Indeed Companies feature uses storage key prefix: "indeedCompanies"
-   They both open the SAME Companies list view, but have SEPARATE toggles/keys.
+   Companies toggles (3 distinct keys, linked together):
+   - LinkedIn:   "companies"
+   - Indeed:     "indeedCompanies"
+   - Glassdoor:  "glassdoorCompanies"
+   All open the SAME Companies list view and move together.
    ───────────────────────────────────────────────────────────── */
 
 const FILTER_KEYS = [
@@ -37,10 +38,14 @@ const FILTER_KEYS = [
   "applied",
   "filterByHours",
   "userText",
-  "companies",        // Companies (LinkedIn)
-  "indeedCompanies",  // Companies (Indeed)
-  "indeedUserText",   // Keywords (Indeed)   (UI-only mirror)
-  /* ✅ NEW: Glassdoor keywords toggle (UI-only mirror of shared key) */
+
+  // Companies (3 sites, linked together)
+  "companies",           // LinkedIn
+  "indeedCompanies",     // Indeed
+  "glassdoorCompanies",  // Glassdoor
+
+  // Keywords UI mirrors (shared back-end key)
+  "indeedUserText",
   "glassdoorUserText",
 ];
 
@@ -54,10 +59,14 @@ const PREMIUM_KEYS = new Set([
   "applied",
   "filterByHours",
   "userText",
+
+  // Companies (all premium, linked)
   "companies",
   "indeedCompanies",
+  "glassdoorCompanies",
+
+  // Keywords mirrors
   "indeedUserText",
-  /* ✅ NEW: make Glassdoor keywords premium like others */
   "glassdoorUserText",
 ]);
 
@@ -68,7 +77,6 @@ function getChrome() {
   return null;
 }
 
-// Detect which site the user is on
 function detectSite() {
   const href = (typeof location !== "undefined" ? location.href : "") || "";
   const host = (typeof location !== "undefined" ? location.hostname : "") || "";
@@ -85,7 +93,7 @@ function detectSite() {
   return "other";
 }
 
-// Removes reposted badges immediately and unhides any rows we hid
+// Clears reposted badges immediately
 function clearRepostedBadgesFromDOM() {
   const cards = document.querySelectorAll(
     ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
@@ -110,15 +118,11 @@ export default function HideJobsFilters() {
   const [subscriptionStatus, setSubscriptionStatus] = useState("unknown");
   const prevIsSubscribedRef = useRef(false);
 
-  // ✅ Separate states for separate tours
   const [dismissedTourOpen, setDismissedTourOpen] = useState(false);
   const [appliedTourOpen, setAppliedTourOpen] = useState(false);
   const [companiesTourOpen, setCompaniesTourOpen] = useState(false);
   const [companiesTourStep, setCompaniesTourStep] = useState(1);
 
-  // ─────────────────────────────────────────────────────────────
-  // Site-specific visibility
-  // ─────────────────────────────────────────────────────────────
   const site = useMemo(detectSite, []);
   const visibleKeysForSite = useMemo(() => {
     if (site === "linkedin") {
@@ -126,29 +130,29 @@ export default function HideJobsFilters() {
         "dismissed",
         "promoted",
         "viewed",
-        "applied",         // Applied (LinkedIn)
-        "companies",       // Companies (LinkedIn)
-        "userText",        // Keywords (LinkedIn)
-        "filterByHours",   // Filter by Hours
-        "repostedGhost",   // Reposted Jobs
+        "applied",
+        "companies",          // Companies (LinkedIn)
+        "userText",
+        "filterByHours",
+        "repostedGhost",
       ]);
     }
     if (site === "indeed") {
       return new Set([
-        "indeedSponsored", // Sponsored (Indeed)
-        "indeedApplied",   // Applied (Indeed)
-        "indeedCompanies", // Companies (Indeed)
-        "indeedUserText",  // Keywords (Indeed) (UI mirror of shared key)
+        "indeedSponsored",
+        "indeedApplied",
+        "indeedCompanies",    // Companies (Indeed)
+        "indeedUserText",
       ]);
     }
     if (site === "glassdoor") {
       return new Set([
-        "glassdoorApplied",  // Applied (Glassdoor)
-        /* ✅ NEW: show the Glassdoor keywords toggle on Glassdoor pages */
-        "glassdoorUserText", // Keywords (Glassdoor) (UI mirror of shared key)
+        "glassdoorApplied",
+        "glassdoorCompanies", // Companies (Glassdoor)
+        "glassdoorUserText",
       ]);
     }
-    return new Set(); // other pages => show nothing but a message
+    return new Set();
   }, [site]);
 
   const broadcastFiltersChanged = (nextValues) => {
@@ -205,30 +209,41 @@ export default function HideJobsFilters() {
         "isSubscribed",
         "subscriptionStatus",
 
-        // Read the shared keyword toggle used by content scripts
+        // Shared Keywords toggle
         "userTextBadgeVisible",
         "userText",
       ],
       async (res) => {
         const next = { ...DEFAULT_STATE };
 
-        // UI switch reflects ONLY *BadgeVisible*
+        // Default from per-row *BadgeVisible*
         FILTER_KEYS.forEach((k) => {
-          const badgeVisible = !!res?.[`${k}BadgeVisible`];
-          next[k] = badgeVisible;
+          next[k] = !!res?.[`${k}BadgeVisible`];
         });
 
-        // Sync all site rows for Keywords from the single shared key
+        // Coalesce shared Keywords (mirror to all three)
         const sharedKeywordOn =
           typeof res?.userTextBadgeVisible === "boolean"
             ? !!res.userTextBadgeVisible
             : !!res?.userText;
+        next.userText = sharedKeywordOn;
+        next.indeedUserText = sharedKeywordOn;
+        next.glassdoorUserText = sharedKeywordOn;
 
-        next.userText = sharedKeywordOn;          // LinkedIn row
-        next.indeedUserText = sharedKeywordOn;    // Indeed row (UI mirror)
-        next.glassdoorUserText = sharedKeywordOn; // ✅ Glassdoor row (UI mirror)
+        // Coalesce Companies across sites (OR of any of the 6 related keys)
+        const companiesOn =
+          !!res?.companiesBadgeVisible ||
+          !!res?.companiesHidden ||
+          !!res?.indeedCompaniesBadgeVisible ||
+          !!res?.indeedCompaniesHidden ||
+          !!res?.glassdoorCompaniesBadgeVisible ||
+          !!res?.glassdoorCompaniesHidden;
 
-        // repostedGhost switch is controlled via FEATURE_BADGE_KEY
+        next.companies = companiesOn;
+        next.indeedCompanies = companiesOn;
+        next.glassdoorCompanies = companiesOn;
+
+        // Reposted ghost follows the feature badge
         next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
 
         setValues(next);
@@ -269,6 +284,7 @@ export default function HideJobsFilters() {
       let touched = false;
       const delta = {};
 
+      // Per-row BadgeVisible updates
       FILTER_KEYS.forEach((k) => {
         const badgeKey = `${k}BadgeVisible`;
         if (badgeKey in changes) {
@@ -278,19 +294,42 @@ export default function HideJobsFilters() {
         }
       });
 
-      // If the shared keyword key changes, mirror it to *all three* UI toggles
+      // Shared Keywords mirror
       if ("userTextBadgeVisible" in changes) {
         const on = !!changes.userTextBadgeVisible.newValue;
         delta.userText = on;
         delta.indeedUserText = on;
-        delta.glassdoorUserText = on; // ✅
+        delta.glassdoorUserText = on;
         touched = true;
       }
       if ("userText" in changes) {
         const on = !!changes.userText.newValue;
         delta.userText = on;
         delta.indeedUserText = on;
-        delta.glassdoorUserText = on; // ✅
+        delta.glassdoorUserText = on;
+        touched = true;
+      }
+
+      // Companies: if ANY of the 6 keys flips, mirror to all three rows
+      const compKeys = [
+        "companiesBadgeVisible",
+        "companiesHidden",
+        "indeedCompaniesBadgeVisible",
+        "indeedCompaniesHidden",
+        "glassdoorCompaniesBadgeVisible",
+        "glassdoorCompaniesHidden",
+      ];
+      let companiesOnDelta = null;
+      for (const k of compKeys) {
+        if (k in changes) {
+          companiesOnDelta = !!changes[k].newValue;
+          break;
+        }
+      }
+      if (companiesOnDelta !== null) {
+        delta.companies = companiesOnDelta;
+        delta.indeedCompanies = companiesOnDelta;
+        delta.glassdoorCompanies = companiesOnDelta;
         touched = true;
       }
 
@@ -342,19 +381,22 @@ export default function HideJobsFilters() {
   const updateValue = (key, checked) => {
     if (PREMIUM_KEYS.has(key) && !isSubscribed) return;
 
-    if (key === "companies" || key === "indeedCompanies") {
-      setValues((prev) => ({ ...prev, companies: checked, indeedCompanies: checked }));
-    } else if (
-      key === "userText" ||
-      key === "indeedUserText" ||
-      key === "glassdoorUserText" /* ✅ link all three */
-    ) {
-      // 🔁 Hard-link LinkedIn + Indeed + Glassdoor keyword toggles so they always move together
+    // 🔁 Hard-link ALL THREE company toggles (LinkedIn, Indeed, Glassdoor)
+    if (key === "companies" || key === "indeedCompanies" || key === "glassdoorCompanies") {
+      setValues((prev) => ({
+        ...prev,
+        companies: checked,
+        indeedCompanies: checked,
+        glassdoorCompanies: checked,
+      }));
+    }
+    // 🔁 Hard-link all keyword toggles (UI mirrors) to the shared key
+    else if (key === "userText" || key === "indeedUserText" || key === "glassdoorUserText") {
       setValues((prev) => ({
         ...prev,
         userText: checked,
         indeedUserText: checked,
-        glassdoorUserText: checked, // ✅
+        glassdoorUserText: checked,
       }));
     } else {
       setValues((prev) => ({ ...prev, [key]: checked }));
@@ -362,8 +404,8 @@ export default function HideJobsFilters() {
 
     if (chromeApi) {
       const updates = {
-        [`${key}BadgeVisible`]: checked, // per-feature (distinct keys)
-        [`${key}Hidden`]: checked,       // per-feature (distinct keys)
+        [`${key}BadgeVisible`]: checked,
+        [`${key}Hidden`]: checked,
       };
 
       if (key === "dismissed") {
@@ -375,29 +417,27 @@ export default function HideJobsFilters() {
         updates[HIDE_REPOSTED_STATE_KEY] = checked ? "true" : "false";
       }
 
-      // 🔁 Hard-link LinkedIn + Indeed company toggles so they always move together
-      if (key === "companies" || key === "indeedCompanies") {
+      // 🔁 Write ALL THREE Companies keys together
+      if (key === "companies" || key === "indeedCompanies" || key === "glassdoorCompanies") {
         updates["companiesBadgeVisible"] = checked;
         updates["companiesHidden"] = checked;
+
         updates["indeedCompaniesBadgeVisible"] = checked;
         updates["indeedCompaniesHidden"] = checked;
+
+        updates["glassdoorCompaniesBadgeVisible"] = checked;
+        updates["glassdoorCompaniesHidden"] = checked;
       }
 
-      // 🔁 Hard-link all Keywords toggles to the single shared keys
-      if (
-        key === "userText" ||
-        key === "indeedUserText" ||
-        key === "glassdoorUserText" /* ✅ */
-      ) {
-        // Shared storage keys used by all content scripts + panel
+      // 🔁 Mirror all Keywords toggles to the shared keys
+      if (key === "userText" || key === "indeedUserText" || key === "glassdoorUserText") {
         updates["userTextBadgeVisible"] = checked;
         updates["userTextHidden"] = checked;
 
-        // UI-only mirrors (optional completeness)
-        updates["indeedUserTextBadgeVisible"] = checked;
+        updates["indeedUserTextBadgeVisible"] = checked;  // UI-only mirrors (optional)
         updates["indeedUserTextHidden"] = checked;
-        updates["glassdoorUserTextBadgeVisible"] = checked; // ✅
-        updates["glassdoorUserTextHidden"] = checked;       // ✅
+        updates["glassdoorUserTextBadgeVisible"] = checked;
+        updates["glassdoorUserTextHidden"] = checked;
       }
 
       chromeApi.storage.local.set(updates, () => {
@@ -418,18 +458,15 @@ export default function HideJobsFilters() {
 
     try {
       const detail = { ...values, [key]: checked };
-      if (key === "companies" || key === "indeedCompanies") {
+      if (key === "companies" || key === "indeedCompanies" || key === "glassdoorCompanies") {
         detail.companies = checked;
         detail.indeedCompanies = checked;
+        detail.glassdoorCompanies = checked;
       }
-      if (
-        key === "userText" ||
-        key === "indeedUserText" ||
-        key === "glassdoorUserText" /* ✅ */
-      ) {
+      if (key === "userText" || key === "indeedUserText" || key === "glassdoorUserText") {
         detail.userText = checked;
         detail.indeedUserText = checked;
-        detail.glassdoorUserText = checked; // ✅
+        detail.glassdoorUserText = checked;
       }
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
       window.dispatchEvent(evt);
@@ -442,13 +479,12 @@ export default function HideJobsFilters() {
   };
 
   const goToCompaniesList = () => {
-    // Shared list view for both LinkedIn + Indeed Companies features
+    // Shared list view
     chromeApi?.storage?.local?.set?.({
       companies_came_from_filters: true,
       hidejobs_panel_view: "companies",
       hidejobs_panel_visible: true,
     });
-
     try {
       const evt = new CustomEvent("hidejobs-panel-set-view", {
         detail: { view: "companies" },
@@ -457,14 +493,18 @@ export default function HideJobsFilters() {
     } catch { }
   };
 
-  // All possible rows (we will filter them per site below)
+  // All possible rows (filtered per site below)
   const rows = [
-    { key: "dismissed", label: "Dismissed" }, // header question mark opens its tour
+    { key: "dismissed", label: "Dismissed" },
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
 
     { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" },
+
+    // Companies rows (ALL premium, shared tour UX)
     { key: "companies", label: "Companies (LinkedIn)", premium: true, tourKey: "companies" },
+    { key: "indeedCompanies", label: "Companies (Indeed)", premium: true, tourKey: "companies" },
+    { key: "glassdoorCompanies", label: "Companies (Glassdoor)", premium: true, tourKey: "companies" },
 
     { key: "userText", label: "Keywords", premium: true },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
@@ -473,29 +513,25 @@ export default function HideJobsFilters() {
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true },
 
-    // Separate toggle for Indeed Companies (distinct storage key)
-    { key: "indeedCompanies", label: "Companies (Indeed)", premium: true, tourKey: "companies" },
-
-    // UI mirror for Indeed keywords
+    // Keywords mirrors
     { key: "indeedUserText", label: "Keywords (Indeed)", premium: true },
-
-    // ✅ NEW: UI mirror for Glassdoor keywords
     { key: "glassdoorUserText", label: "Keywords (Glassdoor)", premium: true },
 
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
   ];
 
-  // Filter rows based on the current site
   const siteFilteredRows = rows.filter((r) => visibleKeysForSite.has(r.key));
-
   const freeRows = siteFilteredRows.filter((r) => !r.premium);
   const premiumRows = siteFilteredRows.filter((r) => r.premium);
 
   const renderRow = (row, isLast) => {
     const disabled = !!row.premium && !isSubscribed;
 
-    // Show a "List" button for BOTH company rows:
-    const isCompanyRow = row.key === "companies" || row.key === "indeedCompanies";
+    // Show "List" for ALL Companies rows (LinkedIn+Indeed+Glassdoor)
+    const isCompanyRow =
+      row.key === "companies" ||
+      row.key === "indeedCompanies" ||
+      row.key === "glassdoorCompanies";
 
     const rightControl = isCompanyRow ? (
       <div className="flex items-center gap-2">
@@ -541,7 +577,6 @@ export default function HideJobsFilters() {
           {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
           <span className={`truncate ${disabled ? "text-gray-400" : ""}`}>{row.label}</span>
 
-          {/* Row-level “?” only where we have a per-row tour */}
           {row.tourKey ? (
             <Tooltip title="How it works">
               <Button
@@ -559,7 +594,6 @@ export default function HideJobsFilters() {
     );
   };
 
-  // If the page is not LinkedIn/Indeed/Glassdoor job pages, show only the message
   if (visibleKeysForSite.size === 0) {
     return (
       <div className="space-y-4">
@@ -571,41 +605,19 @@ export default function HideJobsFilters() {
 
         <div className="rounded-lg border border-gray-200 p-6 text-center">
           <Empty
-            description={
-              <span className="text-gray-600">
-                Please navigate to a job page to start using filters.
-              </span>
-            }
+            description={<span className="text-gray-600">Please navigate to a job page to start using filters.</span>}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
 
           <div className="mt-6">
             <Space direction="vertical" size="large" style={{ width: "100%" }}>
-              <Button
-                type="primary"
-                size="large"
-                block
-                href="https://www.linkedin.com/jobs/search"
-                target="_blank"
-              >
+              <Button type="primary" size="large" block href="https://www.linkedin.com/jobs/search" target="_blank">
                 Go to LinkedIn Jobs
               </Button>
-              <Button
-                type="primary"
-                size="large"
-                block
-                href="https://www.indeed.com/jobs"
-                target="_blank"
-              >
+              <Button type="primary" size="large" block href="https://www.indeed.com/jobs" target="_blank">
                 Go to Indeed Jobs
               </Button>
-              <Button
-                type="primary"
-                size="large"
-                block
-                href="https://glassdoor.com/Job"
-                target="_blank"
-              >
+              <Button type="primary" size="large" block href="https://glassdoor.com/Job" target="_blank">
                 Go to Glassdoor Jobs
               </Button>
             </Space>
@@ -617,7 +629,7 @@ export default function HideJobsFilters() {
 
   return (
     <div className="space-y-4">
-      {/* Header with the question mark back at the title (LinkedIn's "Dismissed" tour lives here) */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
@@ -666,7 +678,7 @@ export default function HideJobsFilters() {
 
       {!isSubscribed && <SubscribeButton />}
 
-      {/* Overlays / tours */}
+      {/* Tours */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
       <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
       <CompanyLinkedinTour

@@ -31,7 +31,7 @@ export default function BadgesHost() {
     typeof location !== "undefined" ? location.hostname.toLowerCase() : "";
   const isLinkedIn = useMemo(() => host.includes("linkedin.com"), [host]);
   const isIndeed = useMemo(() => /(^|\.)indeed\./i.test(host), [host]);
-  const isGlassdoor = useMemo(() => /(^|\.)glassdoor\./i.test(host), [host]); // ← added
+  const isGlassdoor = useMemo(() => /(^|\.)glassdoor\./i.test(host), [host]);
 
   // RIGHT stack position → top differs per host
   const rightContainerStyle = {
@@ -45,7 +45,7 @@ export default function BadgesHost() {
     gap: 6,
   };
 
-  // LEFT single badge (Total) – unchanged
+  // LEFT single badge (Total)
   const leftContainerStyle = {
     position: "fixed",
     top: "125px",
@@ -68,16 +68,16 @@ export default function BadgesHost() {
       { key: "companies", label: "Companies", color: "companies" },
     ];
   } else if (isIndeed) {
-    // Indeed badges: Applied + Sponsored + Companies (Indeed)
     badges = [
       { key: "indeedApplied", label: "Applied", color: "applied" },
       { key: "indeedSponsored", label: "Sponsored", color: "promoted" },
       { key: "indeedCompanies", label: "Companies", color: "companies" },
     ];
-  } else if (isGlassdoor) { // ← added
-    // Glassdoor badges: Applied (Glassdoor)
+  } else if (isGlassdoor) {
+    // ✅ Glassdoor: Applied + Companies
     badges = [
       { key: "glassdoorApplied", label: "Applied", color: "applied" },
+      { key: "glassdoorCompanies", label: "Companies", color: "companies" },
     ];
   }
 
