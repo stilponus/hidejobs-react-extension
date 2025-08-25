@@ -20,12 +20,61 @@ import {
   FEATURE_BADGE_KEY,
 } from "../components/RepostedJobs/repostedDom";
 
-function isJobPage(href = location.href) {
+// ─────────────────────────────────────────────────────────────
+// PREDICATES
+// ─────────────────────────────────────────────────────────────
+
+// Keep your original LinkedIn job-page logic as-is
+function isLinkedInJobPage(href = location.href) {
   return (
     href.startsWith("https://www.linkedin.com/jobs/search") ||
     href.startsWith("https://www.linkedin.com/jobs/collections")
   );
 }
+
+// New: Indeed job-page allow-list (resilient; avoids non-job sub-sites)
+function isIndeedJobPage(href = location.href) {
+  const url = new URL(href);
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.toLowerCase();
+
+  if (!host.includes("indeed.")) return false;
+
+  // Explicitly exclude non-job areas
+  const blockedPaths = [
+    "/companies",
+    "/career/salaries",
+    "/about",
+    "/help",
+    "/legal",
+    "/cmp",
+    "/survey",
+    "/career",
+    "/viewjob",          // single posting page (not the list)
+    "/notifications",
+    "/contributions",
+    "/career-advice",
+    "/career-services",
+  ];
+  if (blockedPaths.some((p) => path.startsWith(p))) return false;
+
+  const blockedHosts = new Set([
+    "employers.indeed.com",
+    "profile.indeed.com",
+    "myjobs.indeed.com",
+    "dd.indeed.com",
+    "secure.indeed.com",
+    "smartapply.indeed.com",
+    "messages.indeed.com",
+  ]);
+  if (blockedHosts.has(host)) return false;
+
+  // Treat everything else on indeed.* as the job search/list pages
+  return true;
+}
+
+// Backwards-compat alias used below for panels (LinkedIn-only panels)
+const isJobPage = isLinkedInJobPage;
 
 // Remove reposted badges & unhide rows (used when feature is OFF)
 function clearRepostedBadgesFromDOM() {
@@ -164,8 +213,13 @@ function clearRepostedBadgesFromDOM() {
       return () => clearInterval(id);
     }, []);
 
-    const shouldShowKeywordPanel = isJobPage(href) && showKeywords;
-    const shouldShowHoursPanel = isJobPage(href) && showFilterByHours;
+    // Keep panels LinkedIn-only (UNCHANGED)
+    const shouldShowKeywordPanel = isJobPage(href) && showKeywords;       // LinkedIn only
+    const shouldShowHoursPanel = isJobPage(href) && showFilterByHours;    // LinkedIn only
+
+    // NEW: badges on LinkedIn OR Indeed
+    const shouldShowBadges =
+      isLinkedInJobPage(href) || isIndeedJobPage(href);
 
     return (
       <StyleProvider container={shadowRoot}>
@@ -211,10 +265,10 @@ function clearRepostedBadgesFromDOM() {
           {/* Main side panel */}
           <HideJobsPanelShell />
 
-          {/* Badge stack (only on job pages) */}
-          {isJobPage(href) && <BadgesHost />}
+          {/* Badge stack: now shows on LinkedIn job pages OR Indeed job pages */}
+          {shouldShowBadges && <BadgesHost />}
 
-          {/* Floating panels */}
+          {/* Floating panels (LinkedIn-only logic preserved) */}
           <KeywordFilterPanel visible={shouldShowKeywordPanel} />
           <FilterByHoursPanel visible={shouldShowHoursPanel} />
         </ConfigProvider>

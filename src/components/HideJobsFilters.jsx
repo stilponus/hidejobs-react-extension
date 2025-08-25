@@ -17,7 +17,14 @@ import {
 import SubscribeButton from "./SubscribeButton";
 import InteractiveTour from "./Tours/InteractiveTour";           // Dismissed-only tour
 import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";   // Applied (LinkedIn)-only tour
-import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";   // ← Companies tour
+import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";   // Companies tour (shared UX)
+
+/* ─────────────────────────────────────────────────────────────
+   IMPORTANT:
+   - LinkedIn Companies feature uses storage key prefix: "companies"
+   - Indeed Companies feature uses storage key prefix: "indeedCompanies"
+   They both open the SAME Companies list view, but have SEPARATE toggles/keys.
+   ───────────────────────────────────────────────────────────── */
 
 const FILTER_KEYS = [
   "dismissed",
@@ -30,7 +37,8 @@ const FILTER_KEYS = [
   "applied",
   "filterByHours",
   "userText",
-  "companies",
+  "companies",        // Companies (LinkedIn)
+  "indeedCompanies",  // Companies (Indeed)  ← NEW DISTINCT KEY
 ];
 
 const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
@@ -43,7 +51,8 @@ const PREMIUM_KEYS = new Set([
   "applied",
   "filterByHours",
   "userText",
-  "companies",
+  "companies",        // premium
+  "indeedCompanies",  // premium
 ]);
 
 function getChrome() {
@@ -112,7 +121,7 @@ export default function HideJobsFilters() {
         "promoted",
         "viewed",
         "applied",         // Applied (LinkedIn)
-        "companies",
+        "companies",       // Companies (LinkedIn)
         "userText",        // Keywords
         "filterByHours",   // Filter by Hours
         "repostedGhost",   // Reposted Jobs
@@ -122,6 +131,7 @@ export default function HideJobsFilters() {
       return new Set([
         "indeedSponsored", // Sponsored (Indeed)
         "indeedApplied",   // Applied (Indeed)
+        "indeedCompanies", // Companies (Indeed)  ← ONLY on Indeed pages
       ]);
     }
     if (site === "glassdoor") {
@@ -297,8 +307,8 @@ export default function HideJobsFilters() {
 
     if (chromeApi) {
       const updates = {
-        [`${key}BadgeVisible`]: checked,
-        [`${key}Hidden`]: checked,
+        [`${key}BadgeVisible`]: checked, // per-feature (distinct keys)
+        [`${key}Hidden`]: checked,       // per-feature (distinct keys)
       };
 
       if (key === "dismissed") {
@@ -339,6 +349,7 @@ export default function HideJobsFilters() {
   };
 
   const goToCompaniesList = () => {
+    // Shared list view for both LinkedIn + Indeed Companies features
     chromeApi?.storage?.local?.set?.({
       companies_came_from_filters: true,
       hidejobs_panel_view: "companies",
@@ -360,13 +371,17 @@ export default function HideJobsFilters() {
     { key: "viewed", label: "Viewed" },
 
     { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" },
-    { key: "companies", label: "Companies", premium: true, tourKey: "companies" },
+    { key: "companies", label: "Companies (LinkedIn)", premium: true, tourKey: "companies" },
+
     { key: "userText", label: "Keywords", premium: true },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "repostedGhost", label: "Reposted Jobs", premium: true },
 
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true },
+
+    // NEW: separate toggle for Indeed Companies (distinct storage key)
+    { key: "indeedCompanies", label: "Companies (Indeed)", premium: true, tourKey: "companies" },
 
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
   ];
@@ -380,35 +395,37 @@ export default function HideJobsFilters() {
   const renderRow = (row, isLast) => {
     const disabled = !!row.premium && !isSubscribed;
 
-    const rightControl =
-      row.key === "companies" ? (
-        <div className="flex items-center gap-2">
-          <Tooltip title={disabled ? "Subscribe to enable" : "Open Hidden Companies list"}>
-            <Button
-              size="small"
-              icon={<EyeInvisibleFilled />}
-              onClick={disabled || (companiesTourOpen && companiesTourStep === 1) ? undefined : goToCompaniesList}
-              disabled={disabled || (companiesTourOpen && companiesTourStep === 1)}
-              style={(companiesTourOpen && companiesTourStep === 1) ? { cursor: "default" } : {}}
-            >
-              List
-            </Button>
-          </Tooltip>
-          <Switch
+    // Show a "List" button for BOTH company rows:
+    const isCompanyRow = row.key === "companies" || row.key === "indeedCompanies";
+
+    const rightControl = isCompanyRow ? (
+      <div className="flex items-center gap-2">
+        <Tooltip title={disabled ? "Subscribe to enable" : "Open Hidden Companies list"}>
+          <Button
             size="small"
-            checked={!!values[row.key]}
-            onChange={(checked) => updateValue(row.key, checked)}
-            disabled={disabled || (companiesTourOpen && companiesTourStep === 3)}
-          />
-        </div>
-      ) : (
+            icon={<EyeInvisibleFilled />}
+            onClick={disabled || (companiesTourOpen && companiesTourStep === 1) ? undefined : goToCompaniesList}
+            disabled={disabled || (companiesTourOpen && companiesTourStep === 1)}
+            style={(companiesTourOpen && companiesTourStep === 1) ? { cursor: "default" } : {}}
+          >
+            List
+          </Button>
+        </Tooltip>
         <Switch
           size="small"
           checked={!!values[row.key]}
           onChange={(checked) => updateValue(row.key, checked)}
-          disabled={disabled}
+          disabled={disabled || (companiesTourOpen && companiesTourStep === 3)}
         />
-      );
+      </div>
+    ) : (
+      <Switch
+        size="small"
+        checked={!!values[row.key]}
+        onChange={(checked) => updateValue(row.key, checked)}
+        disabled={disabled}
+      />
+    );
 
     const openTourForRow = () => {
       if (row.tourKey === "applied") setAppliedTourOpen(true);
@@ -550,7 +567,7 @@ export default function HideJobsFilters() {
 
       {!isSubscribed && <SubscribeButton />}
 
-      {/* Overlays (only meaningful on LinkedIn, but harmless elsewhere) */}
+      {/* Overlays / tours */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
       <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
       <CompanyLinkedinTour

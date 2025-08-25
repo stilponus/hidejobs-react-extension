@@ -45,6 +45,11 @@ export default defineConfig({
         "content-hours-patch": path.resolve(__dirname, "src/content-scripts/content-hours-patch.js"),
         "content-companies": path.resolve(__dirname, "src/content-scripts/content-companies.js"),
 
+        "content-applied-indeed": path.resolve(__dirname, "src/content-scripts/content-applied-indeed.js"),
+        "content-sponsored-indeed": path.resolve(__dirname, "src/content-scripts/content-sponsored-indeed.js"),
+        "content-companies-indeed": path.resolve(__dirname, "src/content-scripts/content-companies-indeed.js"),
+
+        
       },
       output: {
         entryFileNames: '[name].js'

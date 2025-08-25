@@ -79,7 +79,33 @@
         "content-viewed.js",
         "content-keywords.js",
         "content-hours-patch.js",
-        "content-companies.js" 
+        "content-companies.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.indeed.com/*",
+        "https://*.indeed.co.uk/*",
+        "https://*.indeed.fr/*",
+        "https://*.indeed.de/*",
+        "https://*.indeed.ca/*",
+        "https://*.indeed.com.au/*",
+        "https://*.indeed.co.in/*",
+        "https://*.indeed.ie/*",
+        "https://*.indeed.nl/*",
+        "https://*.indeed.ch/*",
+        "https://*.indeed.be/*",
+        "https://*.indeed.it/*",
+        "https://*.indeed.es/*",
+        "https://*.indeed.com.br/*",
+        "https://*.indeed.mx/*",
+        "https://*.indeed.jp/*"
+      ],
+      "js": [
+        "content-applied-indeed.js",
+        "content-sponsored-indeed.js",
+        "content-companies-indeed.js"
       ],
       "run_at": "document_idle"
     }
