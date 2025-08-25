@@ -39,6 +39,7 @@ const FILTER_KEYS = [
   "userText",
   "companies",        // Companies (LinkedIn)
   "indeedCompanies",  // Companies (Indeed)  ← NEW DISTINCT KEY
+  "indeedUserText",   // Keywords (Indeed)   ← NEW DISTINCT KEY (UI-only mirror)
 ];
 
 const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
@@ -53,6 +54,7 @@ const PREMIUM_KEYS = new Set([
   "userText",
   "companies",        // premium
   "indeedCompanies",  // premium
+  "indeedUserText",   // premium
 ]);
 
 function getChrome() {
@@ -122,7 +124,7 @@ export default function HideJobsFilters() {
         "viewed",
         "applied",         // Applied (LinkedIn)
         "companies",       // Companies (LinkedIn)
-        "userText",        // Keywords
+        "userText",        // Keywords (LinkedIn)
         "filterByHours",   // Filter by Hours
         "repostedGhost",   // Reposted Jobs
       ]);
@@ -131,7 +133,8 @@ export default function HideJobsFilters() {
       return new Set([
         "indeedSponsored", // Sponsored (Indeed)
         "indeedApplied",   // Applied (Indeed)
-        "indeedCompanies", // Companies (Indeed)  ← ONLY on Indeed pages
+        "indeedCompanies", // Companies (Indeed)
+        "indeedUserText",  // Keywords (Indeed)  ← ONLY on Indeed pages
       ]);
     }
     if (site === "glassdoor") {
@@ -195,6 +198,10 @@ export default function HideJobsFilters() {
         FEATURE_BADGE_KEY,
         "isSubscribed",
         "subscriptionStatus",
+
+        // Read the shared keyword toggle used by content scripts
+        "userTextBadgeVisible",
+        "userText",
       ],
       async (res) => {
         const next = { ...DEFAULT_STATE };
@@ -204,6 +211,15 @@ export default function HideJobsFilters() {
           const badgeVisible = !!res?.[`${k}BadgeVisible`];
           next[k] = badgeVisible;
         });
+
+        // Sync LinkedIn + Indeed keyword row from the single shared key
+        const sharedKeywordOn =
+          typeof res?.userTextBadgeVisible === "boolean"
+            ? !!res.userTextBadgeVisible
+            : !!res?.userText;
+
+        next.userText = sharedKeywordOn;
+        next.indeedUserText = sharedKeywordOn;
 
         // repostedGhost switch is controlled via FEATURE_BADGE_KEY
         next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
@@ -255,6 +271,20 @@ export default function HideJobsFilters() {
         }
       });
 
+      // If the shared keyword key changes, mirror it to both UI toggles
+      if ("userTextBadgeVisible" in changes) {
+        const on = !!changes.userTextBadgeVisible.newValue;
+        delta.userText = on;
+        delta.indeedUserText = on;
+        touched = true;
+      }
+      if ("userText" in changes) {
+        const on = !!changes.userText.newValue;
+        delta.userText = on;
+        delta.indeedUserText = on;
+        touched = true;
+      }
+
       if ("badgesCompact" in changes) {
         setCompact(!!changes.badgesCompact.newValue);
       }
@@ -305,6 +335,9 @@ export default function HideJobsFilters() {
 
     if (key === "companies" || key === "indeedCompanies") {
       setValues((prev) => ({ ...prev, companies: checked, indeedCompanies: checked }));
+    } else if (key === "userText" || key === "indeedUserText") {
+      // 🔁 Hard-link LinkedIn + Indeed keyword toggles so they always move together
+      setValues((prev) => ({ ...prev, userText: checked, indeedUserText: checked }));
     } else {
       setValues((prev) => ({ ...prev, [key]: checked }));
     }
@@ -332,6 +365,17 @@ export default function HideJobsFilters() {
         updates["indeedCompaniesHidden"] = checked;
       }
 
+      // 🔁 Hard-link LinkedIn + Indeed keyword toggles so they always move together
+      if (key === "userText" || key === "indeedUserText") {
+        // Shared storage keys used by both content scripts + panel
+        updates["userTextBadgeVisible"] = checked;
+        updates["userTextHidden"] = checked;
+
+        // Mirror UI-only badge keys for completeness
+        updates["indeedUserTextBadgeVisible"] = checked;
+        updates["indeedUserTextHidden"] = checked;
+      }
+
       chromeApi.storage.local.set(updates, () => {
         if (key === "repostedGhost") {
           if (checked) {
@@ -353,6 +397,10 @@ export default function HideJobsFilters() {
       if (key === "companies" || key === "indeedCompanies") {
         detail.companies = checked;
         detail.indeedCompanies = checked;
+      }
+      if (key === "userText" || key === "indeedUserText") {
+        detail.userText = checked;
+        detail.indeedUserText = checked;
       }
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
       window.dispatchEvent(evt);
@@ -398,6 +446,9 @@ export default function HideJobsFilters() {
 
     // NEW: separate toggle for Indeed Companies (distinct storage key)
     { key: "indeedCompanies", label: "Companies (Indeed)", premium: true, tourKey: "companies" },
+
+    // NEW: separate toggle for Indeed Keywords (UI mirror of the shared keyword feature)
+    { key: "indeedUserText", label: "Keywords (Indeed)", premium: true },
 
     { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
   ];

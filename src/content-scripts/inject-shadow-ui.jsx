@@ -213,9 +213,12 @@ function clearRepostedBadgesFromDOM() {
       return () => clearInterval(id);
     }, []);
 
-    // Keep panels LinkedIn-only (UNCHANGED)
-    const shouldShowKeywordPanel = isJobPage(href) && showKeywords;       // LinkedIn only
+    // Keep hours panel LinkedIn-only (UNCHANGED)
     const shouldShowHoursPanel = isJobPage(href) && showFilterByHours;    // LinkedIn only
+
+    // ✅ Show the keyword panel on LinkedIn OR Indeed, using the same toggle/state
+    const shouldShowKeywordPanel =
+      (isLinkedInJobPage(href) || isIndeedJobPage(href)) && showKeywords;
 
     // NEW: badges on LinkedIn OR Indeed
     const shouldShowBadges =
@@ -268,7 +271,7 @@ function clearRepostedBadgesFromDOM() {
           {/* Badge stack: now shows on LinkedIn job pages OR Indeed job pages */}
           {shouldShowBadges && <BadgesHost />}
 
-          {/* Floating panels (LinkedIn-only logic preserved) */}
+          {/* Floating panels */}
           <KeywordFilterPanel visible={shouldShowKeywordPanel} />
           <FilterByHoursPanel visible={shouldShowHoursPanel} />
         </ConfigProvider>

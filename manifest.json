@@ -105,7 +105,8 @@
       "js": [
         "content-applied-indeed.js",
         "content-sponsored-indeed.js",
-        "content-companies-indeed.js"
+        "content-companies-indeed.js",
+        "content-keywords-indeed.js"
       ],
       "run_at": "document_idle"
     }

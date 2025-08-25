@@ -48,6 +48,7 @@ export default defineConfig({
         "content-applied-indeed": path.resolve(__dirname, "src/content-scripts/content-applied-indeed.js"),
         "content-sponsored-indeed": path.resolve(__dirname, "src/content-scripts/content-sponsored-indeed.js"),
         "content-companies-indeed": path.resolve(__dirname, "src/content-scripts/content-companies-indeed.js"),
+        "content-keywords-indeed": path.resolve(__dirname, "src/content-scripts/content-keywords-indeed.js"),
 
         
       },
