@@ -126,7 +126,8 @@
       ],
       "js": [
         "content-keywords-glassdoor.js",
-        "content-applied-glassdoor.js"
+        "content-applied-glassdoor.js",
+        "content-companies-glassdoor.js"
       ],
       "run_at": "document_idle"
     }

@@ -52,8 +52,8 @@ export default defineConfig({
 
         "content-keywords-glassdoor": path.resolve(__dirname, "src/content-scripts/content-keywords-glassdoor.js"),
         "content-applied-glassdoor": path.resolve(__dirname, "src/content-scripts/content-applied-glassdoor.js"),
+        "content-companies-glassdoor": path.resolve(__dirname, "src/content-scripts/content-companies-glassdoor.js"),
 
-        
       },
       output: {
         entryFileNames: '[name].js'
