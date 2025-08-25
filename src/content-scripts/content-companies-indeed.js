@@ -1,17 +1,59 @@
 // public/content-companies-indeed.js
 /************************************************************
  * HideJobs – Indeed "Companies" helper (overlay + hide by company)
- * 
- * Storage keys used:
- *   - companiesBadgeVisible : boolean (controls injection on Indeed)
- *   - hiddenCompanies       : string[] (company names to hide)
- *   - overlaidJobIds        : string[] (cards currently showing the overlay)
+ *
+ * ✅ IMPORTANT: The EYE ICON IS MANAGED BY THE TOGGLE (NOT THE BADGE).
+ * This script only handles overlay UI and actual job card hiding/unhiding.
+ *
+ * Shared list / misc:
+ *   - hiddenCompanies         : string[] (shared company list)
+ *   - overlaidJobIds          : string[] (cards currently showing the overlay)
+ *
+ * We support BOTH old and new per-site keys so it works with either UI wiring:
+ *   Badge visibility keys (either may be used by the UI):
+ *     - indeedCompaniesBadgeVisible  (preferred for Indeed)
+ *     - companiesBadgeVisible        (legacy/shared key)
+ *
+ *   Toggle keys (either may be used by the UI):
+ *     - indeedCompaniesHidden        (preferred for Indeed)
+ *     - companiesHidden              (legacy/shared key)
+ *
+ *   Count keys (we update both so whichever the UI uses gets the value):
+ *     - indeedCompaniesHiddenCount
+ *     - companiesHiddenCount
  *
  * Page scope: Indeed job list pages only (excludes employers/profile/etc)
  ************************************************************/
 
 (() => {
   console.log("[HideJobs] indeed companies logic loaded:", location.href);
+
+  /* ──────────────────────────────────────────────────────────
+   * Keys + helpers (support old & new keys)
+   * ────────────────────────────────────────────────────────── */
+  const KEYS = {
+    badgeVisible: ["indeedCompaniesBadgeVisible", "companiesBadgeVisible"],
+    hidden: ["indeedCompaniesHidden", "companiesHidden"],
+    count: ["indeedCompaniesHiddenCount", "companiesHiddenCount"],
+    companies: "hiddenCompanies",
+    overlaid: "overlaidJobIds",
+  };
+
+  function getFirst(obj, keys, fallback = undefined) {
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
+    }
+    return fallback;
+  }
+  function getFirstBool(obj, keys, fallback = false) {
+    const v = getFirst(obj, keys, undefined);
+    return typeof v === "undefined" ? fallback : !!v;
+  }
+  function setAll(keys, value, cb) {
+    const toSet = {};
+    keys.forEach((k) => (toSet[k] = value));
+    chrome?.storage?.local?.set(toSet, cb);
+  }
 
   /* ──────────────────────────────────────────────────────────
    * Utilities
@@ -99,7 +141,10 @@
   /* ──────────────────────────────────────────────────────────
    * State + Observer
    * ────────────────────────────────────────────────────────── */
-  let companiesBadgeVisible = false;
+  let badgeVisible = false; // from either *CompaniesBadgeVisible key
+  let isOn = false;         // from either *CompaniesHidden key
+  let hiddenCount = 0;
+  const countedIds = new Set();
   let jobListObserver = null;
   let lastUrl = location.href;
 
@@ -120,12 +165,14 @@
 
       /* tooltip variant when star rating exists */
       .hidejobs-hover-with-star { padding: 0px 7px !important; }
+
+      .hidejobs-overlay { transition: opacity .3s ease; }
     `;
     document.head.appendChild(style);
   })();
 
   /* ──────────────────────────────────────────────────────────
-   * Icon + overlay injection
+   * Icon + overlay injection (eye managed by toggle, not badge)
    * ────────────────────────────────────────────────────────── */
   function injectFooterIcon(anchor) {
     const jobId = anchor.getAttribute("data-jk");
@@ -148,7 +195,7 @@
     footerIcon.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg"
            width="18" height="18"
-           fill="#0a66c2"
+           fill="#28507c"
            class="bi bi-eye-slash-fill"
            viewBox="0 0 16 16"
            style="cursor:pointer;transition:fill .3s;position:absolute;left:10px;">
@@ -219,18 +266,18 @@
     footerIcon.appendChild(hoverMessage);
 
     const svgEl = footerIcon.querySelector("svg");
-    footerIcon.addEventListener("mouseenter", () => (svgEl.style.fill = "#b10044"));
-    footerIcon.addEventListener("mouseleave", () => (svgEl.style.fill = "#0a66c2"));
+    footerIcon.addEventListener("mouseenter", () => (svgEl.style.fill = "#d40048"));
+    footerIcon.addEventListener("mouseleave", () => (svgEl.style.fill = "#28507c"));
 
     footerIcon.addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
       showOverlay(jobCard, jobId);
-      chrome?.storage?.local?.get(["overlaidJobIds"], (res) => {
-        const arr = res?.overlaidJobIds || [];
+      chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+        const arr = res?.[KEYS.overlaid] || [];
         if (!arr.includes(jobId)) {
           arr.push(jobId);
-          chrome.storage.local.set({ overlaidJobIds: arr });
+          chrome.storage.local.set({ [KEYS.overlaid]: arr });
         }
       });
     });
@@ -262,9 +309,16 @@
       justifyContent: "center",
       alignItems: "center",
       zIndex: "10",
-      transition: "background-color .3s ease, backdrop-filter .3s ease",
+      transition: "background-color .3s ease, backdrop-filter .3s ease, opacity .3s ease",
       borderBottom: "1px solid #e8e8e8",
       pointerEvents: "auto",
+      opacity: "0",
+    });
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = "1";
+      overlay.style.backgroundColor = "rgba(128,128,128,0.5)";
+      overlay.style.backdropFilter = "blur(2px)";
     });
 
     overlay.addEventListener("mouseenter", () => {
@@ -274,23 +328,17 @@
       overlay.style.backgroundColor = "rgba(128,128,128,0.5)";
     });
 
-    setTimeout(() => {
-      overlay.style.backgroundColor = "rgba(128,128,128,0.5)";
-      overlay.style.backdropFilter = "blur(2px)";
-    }, 10);
-
     overlay.addEventListener("click", (e) => {
       if (!e.target.closest(".hidejobs-message-button") && !e.target.closest(".hidejobs-close-button")) {
-        overlay.style.transition = "opacity .3s ease";
         overlay.style.opacity = "0";
         setTimeout(() => {
           overlay.remove();
           jobCard.style.pointerEvents = "";
           anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
-          chrome?.storage?.local?.get(["overlaidJobIds"], (res) => {
-            let arr = res?.overlaidJobIds || [];
+          chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+            let arr = res?.[KEYS.overlaid] || [];
             arr = arr.filter((id) => id !== jobId);
-            chrome.storage.local.set({ overlaidJobIds: arr });
+            chrome.storage.local.set({ [KEYS.overlaid]: arr });
           });
         }, 300);
       }
@@ -328,16 +376,15 @@
     closeButton.addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
-      overlay.style.transition = "opacity .3s ease";
       overlay.style.opacity = "0";
       setTimeout(() => {
         overlay.remove();
         jobCard.style.pointerEvents = "";
         anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
-        chrome?.storage?.local?.get(["overlaidJobIds"], (res) => {
-          let arr = res?.overlaidJobIds || [];
+        chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+          let arr = res?.[KEYS.overlaid] || [];
           arr = arr.filter((id) => id !== jobId);
-          chrome.storage.local.set({ overlaidJobIds: arr });
+          chrome.storage.local.set({ [KEYS.overlaid]: arr });
         });
       }, 300);
     });
@@ -363,16 +410,22 @@
       e.stopPropagation();
       e.preventDefault();
 
+      // Turn ON feature via toggle state (so the list starts hiding)
+      if (!isOn) {
+        isOn = true;
+        setAll(KEYS.hidden, true);
+      }
+
       overlay.style.opacity = "0";
       setTimeout(() => {
         overlay.remove();
         jobCard.style.pointerEvents = "";
         anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
 
-        chrome?.storage?.local?.get(["overlaidJobIds"], (res) => {
-          let arr = res?.overlaidJobIds || [];
+        chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+          let arr = res?.[KEYS.overlaid] || [];
           arr = arr.filter((id) => id !== jobId);
-          chrome.storage.local.set({ overlaidJobIds: arr });
+          chrome.storage.local.set({ [KEYS.overlaid]: arr });
         });
 
         const cardLi = getJobCardListItem(jobCard);
@@ -381,16 +434,16 @@
         const compEl = getCompanyElement(jobCard);
         const cName = compEl ? cleanCompanyName(compEl.textContent) : null;
         if (cName) {
-          chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
-            const hiddenCompanies = res?.hiddenCompanies || [];
+          chrome?.storage?.local?.get([KEYS.companies], (res) => {
+            const hiddenCompanies = res?.[KEYS.companies] || [];
             if (!hiddenCompanies.includes(cName)) {
               hiddenCompanies.push(cName);
-              chrome.storage.local.set({ hiddenCompanies }, () => {
-                hideJobsByCompany();
-              });
             }
+            chrome.storage.local.set({ [KEYS.companies]: hiddenCompanies }, () => {
+              hideJobsByCompany(); // recount + apply immediately
+              chrome?.runtime?.sendMessage?.({ action: "addToHideList", companyName: cName });
+            });
           });
-          chrome?.runtime?.sendMessage?.({ action: "addToHideList", companyName: cName });
         }
       }, 300);
     });
@@ -432,7 +485,7 @@
       right: "-5%",
       width: "110%",
       height: "110%",
-      backgroundColor: "#b10044",
+      backgroundColor: "#d40048",
       borderRadius: "50px",
       transform: "translateX(100%)",
       transition: "transform .3s ease",
@@ -477,52 +530,74 @@
   }
 
   /* ──────────────────────────────────────────────────────────
-   * Apply / restore hidden-by-company state
+   * Apply / restore hidden-by-company state + counting
    * ────────────────────────────────────────────────────────── */
+  function writeCount() {
+    setAll(KEYS.count, hiddenCount);
+    if (window.hideJobsUI?.checkHideButtons) window.hideJobsUI.checkHideButtons();
+  }
+
   function hideJobsByCompany() {
-    chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
-      const hiddenCompanies = res?.hiddenCompanies || [];
+    if (!isOn) {
+      // If the toggle is OFF, keep everything visible.
+      restoreHiddenJobs();
+      hiddenCount = 0;
+      countedIds.clear();
+      writeCount();
+      return;
+    }
+
+    chrome?.storage?.local?.get([KEYS.companies], (res) => {
+      const hiddenCompanies = res?.[KEYS.companies] || [];
+
       const anchors = document.querySelectorAll('a[data-jk]');
+      hiddenCount = 0;
+      countedIds.clear();
+
       anchors.forEach((anchor) => {
         const card = getJobCardFromAnchor(anchor);
         const li = getJobCardListItem(card);
         const compEl = getCompanyElement(card);
         const cName = compEl ? cleanCompanyName(compEl.textContent) : "";
+
         if (hiddenCompanies.includes(cName)) {
           li.classList.add("hidejobs-hidden-by-company");
+
+          const id = anchor.getAttribute("data-jk") || "";
+          if (id && !countedIds.has(id)) {
+            countedIds.add(id);
+            hiddenCount++;
+          }
         } else {
           li.classList.remove("hidejobs-hidden-by-company");
         }
       });
+
+      writeCount();
     });
   }
 
   function restoreHiddenJobs() {
-    chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
-      const hiddenCompanies = res?.hiddenCompanies || [];
-      const anchors = document.querySelectorAll('a[data-jk]');
-      anchors.forEach((anchor) => {
-        const card = getJobCardFromAnchor(anchor);
-        const li = getJobCardListItem(card);
-        card.style.pointerEvents = "";
-        const anchorsInside = card.querySelectorAll("a");
-        anchorsInside.forEach((a) => (a.style.pointerEvents = ""));
-        const compEl = getCompanyElement(card);
-        const cName = compEl ? cleanCompanyName(compEl.textContent) : "";
-        if (hiddenCompanies.includes(cName)) {
-          // remove hidden class (we're restoring)
-          li.classList.remove("hidejobs-hidden-by-company");
-        }
-      });
+    const anchors = document.querySelectorAll('a[data-jk]');
+    anchors.forEach((anchor) => {
+      const card = getJobCardFromAnchor(anchor);
+      const li = getJobCardListItem(card);
+      card.style.pointerEvents = "";
+      card.querySelectorAll("a").forEach((a) => (a.style.pointerEvents = ""));
+      li.classList.remove("hidejobs-hidden-by-company");
     });
+
+    hiddenCount = 0;
+    countedIds.clear();
+    writeCount();
   }
 
   /* ──────────────────────────────────────────────────────────
    * Overlays management
    * ────────────────────────────────────────────────────────── */
   function removeAllOverlays() {
-    chrome?.storage?.local?.get(["overlaidJobIds"], (res) => {
-      const overlaidJobIds = res?.overlaidJobIds || [];
+    chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+      const overlaidJobIds = res?.[KEYS.overlaid] || [];
       const anchors = document.querySelectorAll('a[data-jk]');
       anchors.forEach((anchor) => {
         const jobId = anchor.getAttribute("data-jk");
@@ -538,8 +613,8 @@
   }
 
   function reapplyOverlays() {
-    chrome?.storage?.local?.get(["overlaidJobIds"], (res) => {
-      const overlaidJobIds = res?.overlaidJobIds || [];
+    chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+      const overlaidJobIds = res?.[KEYS.overlaid] || [];
       const anchors = document.querySelectorAll('a[data-jk]');
       anchors.forEach((anchor) => {
         const jobId = anchor.getAttribute("data-jk");
@@ -559,9 +634,11 @@
    * Injection + Observation
    * ────────────────────────────────────────────────────────── */
   const ensureInjected = debounce(() => {
-    if (!companiesBadgeVisible || !isIndeedJobPage()) return;
-    chrome?.storage?.local?.get(["overlaidJobIds"], (res) => {
-      const overlaidJobIds = res?.overlaidJobIds || [];
+    if (!badgeVisible || !isIndeedJobPage()) return;
+
+    // The EYE icon/overlay may be used regardless of ON/OFF; hiding only occurs when isOn=true.
+    chrome?.storage?.local?.get([KEYS.overlaid], (res) => {
+      const overlaidJobIds = res?.[KEYS.overlaid] || [];
       const anchors = document.querySelectorAll('a[data-jk]');
       anchors.forEach((anchor) => {
         const jobId = anchor.getAttribute("data-jk");
@@ -573,11 +650,14 @@
         injectFooterIcon(anchor);
       });
     });
-    hideJobsByCompany();
+
+    // Apply/clear hidden state according to toggle
+    if (isOn) hideJobsByCompany();
+    else restoreHiddenJobs();
   }, 50);
 
   function observeJobListContainer() {
-    if (!companiesBadgeVisible) return;
+    if (!badgeVisible) return;
     if (jobListObserver) return;
     const mainContainer = document.getElementById("mosaic-provider-jobcards") || document.body;
     jobListObserver = new MutationObserver(() => ensureInjected());
@@ -595,40 +675,96 @@
   }
 
   /* ──────────────────────────────────────────────────────────
-   * Storage wiring
+   * Storage wiring (handle either set of keys)
    * ────────────────────────────────────────────────────────── */
-  chrome?.storage?.local?.get(["companiesBadgeVisible"], (res) => {
-    companiesBadgeVisible = typeof res?.companiesBadgeVisible !== "undefined" ? !!res.companiesBadgeVisible : false;
-    if (typeof res?.companiesBadgeVisible === "undefined") {
-      chrome.storage.local.set({ companiesBadgeVisible });
+  function applyStoredState() {
+    if (!isIndeedJobPage()) {
+      restoreHiddenJobs();
+      removeAllOverlays();
+      removeFooterIcons();
+      unobserveJobListContainer();
+      return;
     }
 
-    if (companiesBadgeVisible && isIndeedJobPage()) {
+    chrome?.storage?.local?.get(
+      [...KEYS.badgeVisible, ...KEYS.hidden, ...KEYS.count],
+      (res) => {
+        // If BOTH badge keys are undefined, default to false (no badge)
+        const badgeV = getFirst(res, KEYS.badgeVisible, undefined);
+        badgeVisible = typeof badgeV === "undefined" ? false : !!badgeV;
+
+        // Toggle ON/OFF
+        isOn = getFirstBool(res, KEYS.hidden, false);
+
+        // Count (we’ll recompute anyway, but keep storage in sync)
+        const countV = getFirst(res, KEYS.count, 0);
+        hiddenCount = Number(countV || 0);
+
+        if (badgeVisible) {
+          observeJobListContainer();
+          ensureInjected();
+          reapplyOverlays();
+        } else {
+          restoreHiddenJobs();
+          removeAllOverlays();
+          removeFooterIcons();
+          unobserveJobListContainer();
+        }
+
+        // keep both counts in sync
+        writeCount();
+      }
+    );
+  }
+
+  // Initial read
+  applyStoredState();
+
+  chrome?.storage?.onChanged?.addListener((changes, area) => {
+    if (area !== "local") return;
+
+    let touched = false;
+
+    // Badge visibility changes (either key)
+    for (const k of KEYS.badgeVisible) {
+      if (k in changes) {
+        badgeVisible = !!changes[k].newValue;
+        touched = true;
+      }
+    }
+
+    // Toggle changes (either key)
+    for (const k of KEYS.hidden) {
+      if (k in changes) {
+        isOn = !!changes[k].newValue;
+        touched = true;
+      }
+    }
+
+    // Shared companies list changed
+    if (KEYS.companies in changes) {
+      touched = true;
+    }
+
+    if (!touched) return;
+
+    if (!isIndeedJobPage()) {
+      restoreHiddenJobs();
+      removeAllOverlays();
+      removeFooterIcons();
+      unobserveJobListContainer();
+      return;
+    }
+
+    if (badgeVisible) {
+      ensureInjected();
       observeJobListContainer();
-      hideJobsByCompany();
       reapplyOverlays();
     } else {
       restoreHiddenJobs();
       removeAllOverlays();
       removeFooterIcons();
       unobserveJobListContainer();
-    }
-  });
-
-  chrome?.storage?.onChanged?.addListener((changes, area) => {
-    if (area !== "local") return;
-    if ("companiesBadgeVisible" in changes) {
-      companiesBadgeVisible = !!changes.companiesBadgeVisible.newValue;
-      if (companiesBadgeVisible && isIndeedJobPage()) {
-        observeJobListContainer();
-        hideJobsByCompany();
-        reapplyOverlays();
-      } else {
-        restoreHiddenJobs();
-        removeAllOverlays();
-        removeFooterIcons();
-        unobserveJobListContainer();
-      }
     }
   });
 
@@ -639,33 +775,11 @@
     const u = location.href;
     if (u === lastUrl) return;
     lastUrl = u;
-
-    if (isIndeedJobPage()) {
-      if (companiesBadgeVisible) {
-        observeJobListContainer();
-        hideJobsByCompany();
-        reapplyOverlays();
-      }
-    } else {
-      restoreHiddenJobs();
-      removeAllOverlays();
-      removeFooterIcons();
-      unobserveJobListContainer();
-    }
+    applyStoredState();
   }, 1000);
 
   /* ──────────────────────────────────────────────────────────
    * Entry
    * ────────────────────────────────────────────────────────── */
-  window.addEventListener("load", () => {
-    if (!isIndeedJobPage()) return;
-    if (companiesBadgeVisible) {
-      hideJobsByCompany();
-      reapplyOverlays();
-      observeJobListContainer();
-    } else {
-      restoreHiddenJobs();
-      removeAllOverlays();
-    }
-  });
+  window.addEventListener("load", applyStoredState);
 })();

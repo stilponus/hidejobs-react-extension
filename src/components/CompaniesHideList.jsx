@@ -68,9 +68,18 @@ export default function CompaniesHideList() {
       return;
     }
 
-    chromeApi.storage.local.get(["isSubscribed", "companiesBadgeVisible"], (res) => {
+    chromeApi.storage.local.get(["isSubscribed", "companiesBadgeVisible", "indeedCompaniesBadgeVisible"], (res) => {
       setIsSubscribed(!!res?.isSubscribed);
-      setCompaniesFeatureOn(!!res?.companiesBadgeVisible);
+      // unify initial state across both LinkedIn + Indeed company toggles
+      const initialOn = !!res?.companiesBadgeVisible || !!res?.indeedCompaniesBadgeVisible;
+      setCompaniesFeatureOn(initialOn);
+      // force-sync both keys to the unified value so everything starts consistent
+      chromeApi.storage.local.set({
+        companiesBadgeVisible: initialOn,
+        companiesHidden: initialOn,
+        indeedCompaniesBadgeVisible: initialOn,
+        indeedCompaniesHidden: initialOn,
+      });
       setSubscriptionLoading(false);
     });
 
@@ -84,8 +93,21 @@ export default function CompaniesHideList() {
     const onStore = (changes, area) => {
       if (area !== "local") return;
       if ("isSubscribed" in changes) setIsSubscribed(!!changes.isSubscribed.newValue);
-      if ("companiesBadgeVisible" in changes) {
-        setCompaniesFeatureOn(!!changes.companiesBadgeVisible.newValue);
+
+      // keep master switch mirrored with EITHER toggle and immediately sync the counterpart
+      if ("companiesBadgeVisible" in changes || "indeedCompaniesBadgeVisible" in changes) {
+        chromeApi.storage.local.get(["companiesBadgeVisible", "indeedCompaniesBadgeVisible"], (r) => {
+          const li = !!r?.companiesBadgeVisible;
+          const ind = !!r?.indeedCompaniesBadgeVisible;
+          const next = li || ind;
+          setCompaniesFeatureOn(next);
+          chromeApi.storage.local.set({
+            companiesBadgeVisible: next,
+            companiesHidden: next,
+            indeedCompaniesBadgeVisible: next,
+            indeedCompaniesHidden: next,
+          });
+        });
       }
     };
     chromeApi.storage.onChanged.addListener(onStore);
@@ -235,11 +257,14 @@ export default function CompaniesHideList() {
     chrome?.storage?.local?.set({
       companiesBadgeVisible: checked,
       companiesHidden: checked,
+      // sync Indeed Companies too
+      indeedCompaniesBadgeVisible: checked,
+      indeedCompaniesHidden: checked,
     });
 
     try {
       const evt = new CustomEvent("hidejobs-filters-changed", {
-        detail: { companies: checked },
+        detail: { companies: checked, indeedCompanies: checked },
       });
       window.dispatchEvent(evt);
     } catch { }

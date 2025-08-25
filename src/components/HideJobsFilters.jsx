@@ -303,7 +303,11 @@ export default function HideJobsFilters() {
   const updateValue = (key, checked) => {
     if (PREMIUM_KEYS.has(key) && !isSubscribed) return;
 
-    setValues((prev) => ({ ...prev, [key]: checked }));
+    if (key === "companies" || key === "indeedCompanies") {
+      setValues((prev) => ({ ...prev, companies: checked, indeedCompanies: checked }));
+    } else {
+      setValues((prev) => ({ ...prev, [key]: checked }));
+    }
 
     if (chromeApi) {
       const updates = {
@@ -318,6 +322,14 @@ export default function HideJobsFilters() {
       if (key === "repostedGhost") {
         updates[FEATURE_BADGE_KEY] = checked;
         updates[HIDE_REPOSTED_STATE_KEY] = checked ? "true" : "false";
+      }
+
+      // 🔁 Hard-link LinkedIn + Indeed company toggles so they always move together
+      if (key === "companies" || key === "indeedCompanies") {
+        updates["companiesBadgeVisible"] = checked;
+        updates["companiesHidden"] = checked;
+        updates["indeedCompaniesBadgeVisible"] = checked;
+        updates["indeedCompaniesHidden"] = checked;
       }
 
       chromeApi.storage.local.set(updates, () => {
@@ -338,6 +350,10 @@ export default function HideJobsFilters() {
 
     try {
       const detail = { ...values, [key]: checked };
+      if (key === "companies" || key === "indeedCompanies") {
+        detail.companies = checked;
+        detail.indeedCompanies = checked;
+      }
       const evt = new CustomEvent("hidejobs-filters-changed", { detail });
       window.dispatchEvent(evt);
     } catch { }
