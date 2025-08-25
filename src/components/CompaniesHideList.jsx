@@ -17,7 +17,7 @@ const TTL_MS = 12 * 60 * 60 * 1000; // 12h
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -31,6 +31,7 @@ export default function CompaniesHideList() {
 
   // subscription
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true); // show skeleton while loading
 
   // companies feature toggle (synced with Filters panel switch "companies")
   const [companiesFeatureOn, setCompaniesFeatureOn] = useState(false);
@@ -62,11 +63,15 @@ export default function CompaniesHideList() {
 
   // subscription + feature toggle (companies): load cached + force fresh on mount + listen
   useEffect(() => {
-    if (!chromeApi) return;
+    if (!chromeApi) {
+      setSubscriptionLoading(false);
+      return;
+    }
 
     chromeApi.storage.local.get(["isSubscribed", "companiesBadgeVisible"], (res) => {
       setIsSubscribed(!!res?.isSubscribed);
       setCompaniesFeatureOn(!!res?.companiesBadgeVisible);
+      setSubscriptionLoading(false); // stop skeleton after initial cached read
     });
 
     chrome.runtime?.sendMessage?.(
@@ -216,7 +221,7 @@ export default function CompaniesHideList() {
     try {
       const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "filters" } });
       window.dispatchEvent(evt);
-    } catch {}
+    } catch { }
   };
 
   // Toggle handler for "Companies" feature
@@ -233,7 +238,7 @@ export default function CompaniesHideList() {
         detail: { companies: checked },
       });
       window.dispatchEvent(evt);
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -280,8 +285,14 @@ export default function CompaniesHideList() {
         </div>
       </div>
 
-      {/* Subscribe button is shown right under the header */}
-      {!isSubscribed && <SubscribeButton />}
+      {/* Subscription loading skeleton OR Subscribe button */}
+      {subscriptionLoading ? (
+        <div className="rounded-md border border-gray-200 p-3">
+          <Skeleton active paragraph={{ rows: 2 }} />
+        </div>
+      ) : (
+        !isSubscribed && <SubscribeButton />
+      )}
 
       {/* Interactive area (dimmed when unsubscribed) */}
       <div className="relative">
@@ -371,6 +382,3 @@ export default function CompaniesHideList() {
     </div>
   );
 }
-
-
-//////////////////

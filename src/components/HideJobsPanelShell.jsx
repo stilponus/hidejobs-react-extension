@@ -10,6 +10,7 @@ import {
   CloseOutlined,
   ArrowsAltOutlined,
   RetweetOutlined,
+  QuestionCircleFilled, // ← NEW
 } from "@ant-design/icons";
 
 import LogoNoBackground from "../assets/LogoNoBackground";
@@ -24,6 +25,7 @@ import HideJobsFilters from "./HideJobsFilters";
 import { EyeInvisibleFilled } from "@ant-design/icons";
 import CompaniesHideList from "./CompaniesHideList";
 import RepostedPanel from "./RepostedJobs/RepostedPanel";
+import HideJobsHelpPanel from "./HideJobsHelpPanel"; // ← NEW
 
 const HideJobsPanelShell = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -53,8 +55,15 @@ const HideJobsPanelShell = () => {
   useEffect(() => {
     chrome?.storage?.local?.get(["hidejobs_panel_view"], (result) => {
       const v = result?.hidejobs_panel_view;
-      if (v === "filters" || v === "default" || v === "companies" || v === "reposted")
+      if (
+        v === "filters" ||
+        v === "default" ||
+        v === "companies" ||
+        v === "reposted" ||
+        v === "help" // ← NEW
+      ) {
         setPanelView(v);
+      }
     });
   }, []);
 
@@ -153,7 +162,9 @@ const HideJobsPanelShell = () => {
               ? "companies"
               : res?.hidejobs_panel_view === "reposted"
                 ? "reposted"
-                : "default";
+                : res?.hidejobs_panel_view === "help" // ← NEW
+                  ? "help"
+                  : "default";
         setPanelView(lastView);
         setIsPanelVisible(true);
         chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
@@ -205,7 +216,7 @@ const HideJobsPanelShell = () => {
     setManualMode(noScraper);
   }, []);
 
-  // Allow other components to force a view (companies/filters/reposted)
+  // Allow other components to force a view (companies/filters/reposted/help)
   useEffect(() => {
     const onSetView = (e) => {
       const view = e?.detail?.view;
@@ -295,6 +306,19 @@ const HideJobsPanelShell = () => {
       onClick: () => {
         setPanelView("reposted");
         chrome?.storage?.local?.set({ hidejobs_panel_view: "reposted" });
+        setIsPanelVisible(true);
+        chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
+        setIsButtonVisible(false);
+        setDropdownOpen(false);
+      },
+    },
+    {
+      key: "help", // ← NEW
+      label: "Help", // ← NEW
+      icon: <QuestionCircleFilled />, // ← NEW
+      onClick: () => {
+        setPanelView("help");
+        chrome?.storage?.local?.set({ hidejobs_panel_view: "help" });
         setIsPanelVisible(true);
         chrome?.storage?.local?.set({ hidejobs_panel_visible: true });
         setIsButtonVisible(false);
@@ -441,6 +465,8 @@ const HideJobsPanelShell = () => {
             <CompaniesHideList />
           ) : panelView === "reposted" ? (
             <RepostedPanel />
+          ) : panelView === "help" ? ( // ← NEW
+            <HideJobsHelpPanel />
           ) : isLoggedIn ? (
             panelView === "filters" ? <HideJobsFilters /> : content
           ) : (

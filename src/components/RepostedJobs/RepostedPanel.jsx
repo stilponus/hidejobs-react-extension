@@ -1,6 +1,6 @@
 // src/components/RepostedJobs/RepostedPanel.jsx
 import React, { useEffect, useState, useRef } from "react";
-import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message, Switch } from "antd";
+import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message, Switch, Skeleton } from "antd";
 import {
   EyeInvisibleOutlined,
   EyeOutlined,
@@ -61,6 +61,7 @@ export default function RepostedPanel() {
   // Subscription state
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState("unknown"); // internal only
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true); // ⬅️ show skeleton while loading sub state
   const prevIsSubscribed = useRef(false);
 
   const hostSupported = isSupportedHost();
@@ -155,6 +156,7 @@ export default function RepostedPanel() {
         setSubscriptionStatus(res?.subscriptionStatus || "unknown");
         prevIsSubscribed.current = sub;
         if (!sub) enforceOffWhenUnsubscribed();
+        setSubscriptionLoading(false); // ⬅️ stop skeleton after initial cached read
       });
 
       await applyOverlaysFromLocalStorage();
@@ -511,8 +513,14 @@ export default function RepostedPanel() {
         </div>
       </div>
 
-      {/* Subscribe CTA in this panel when unsubscribed */}
-      {!isSubscribed && <SubscribeButton />}
+      {/* Subscribe CTA area — show skeleton while subscription is loading */}
+      {subscriptionLoading ? (
+        <div className="rounded-md border border-gray-200 p-3">
+          <Skeleton active paragraph={{ rows: 2 }} />
+        </div>
+      ) : (
+        !isSubscribed && <SubscribeButton />
+      )}
 
       {!hostSupported ? (
         <Alert
