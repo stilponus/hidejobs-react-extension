@@ -50,6 +50,9 @@ export default defineConfig({
         "content-companies-indeed": path.resolve(__dirname, "src/content-scripts/content-companies-indeed.js"),
         "content-keywords-indeed": path.resolve(__dirname, "src/content-scripts/content-keywords-indeed.js"),
 
+        "content-keywords-glassdoor": path.resolve(__dirname, "src/content-scripts/content-keywords-glassdoor.js"),
+        "content-applied-glassdoor": path.resolve(__dirname, "src/content-scripts/content-applied-glassdoor.js"),
+
         
       },
       output: {

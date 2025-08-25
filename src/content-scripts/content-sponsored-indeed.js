@@ -23,15 +23,15 @@
     if (!host.includes("indeed.")) return false;
 
     const blockedPaths = [
-      "/companies","/career/salaries","/about","/help","/legal",
-      "/cmp","/survey","/career","/viewjob","/notifications",
-      "/contributions","/career-advice","/career-services"
+      "/companies", "/career/salaries", "/about", "/help", "/legal",
+      "/cmp", "/survey", "/career", "/viewjob", "/notifications",
+      "/contributions", "/career-advice", "/career-services"
     ];
     if (blockedPaths.some(p => path.startsWith(p))) return false;
 
     const blockedHosts = new Set([
-      "employers.indeed.com","profile.indeed.com","myjobs.indeed.com",
-      "dd.indeed.com","secure.indeed.com","smartapply.indeed.com",
+      "employers.indeed.com", "profile.indeed.com", "myjobs.indeed.com",
+      "dd.indeed.com", "secure.indeed.com", "smartapply.indeed.com",
       "messages.indeed.com"
     ]);
     if (blockedHosts.has(host)) return false;
@@ -40,17 +40,26 @@
   }
 
   /* -------------------- SELECTORS & HELPERS -------------------- */
+  // Normalize to the card row element (either <li> or slider_item container)
+  const toCard = (el) =>
+    el?.closest?.("li") ||
+    el?.closest?.('div[data-testid="slider_item"]') ||
+    el;
+
+  // Keep it strict: only elements marked by Indeed as maybeSponsoredJob
   const getSponsoredCards = () => {
-    // Primary selector per your previous script:
-    const nodes = Array.from(document.querySelectorAll(".sponsoredJob"));
-    // Fallbacks (defensive): try catching cards that contain a visible "Sponsored" label
-    // without over-hiding non-sponsored content.
-    // We keep it conservative to avoid false positives.
-    return nodes;
+    const hits = new Set();
+    document.querySelectorAll(".maybeSponsoredJob").forEach((el) => {
+      const card = toCard(el);
+      if (card) hits.add(card);
+    });
+    return Array.from(hits);
   };
 
-  const getJobId = (node) => node?.querySelector?.('a[data-jk]')?.getAttribute('data-jk') ?? null;
-  const getRowContainer = (node) => node?.closest?.("li") || node;
+  const getJobId = (node) =>
+    node?.querySelector?.('a[data-jk]')?.getAttribute('data-jk') ??
+    node?.querySelector?.('a[id^="job_"], a[id^="sj_"]')?.id ??
+    null;
 
   // one-time CSS for fully-hidden rows
   (() => {
@@ -61,8 +70,8 @@
     document.head.appendChild(s);
   })();
 
-  function smoothHide(node) {
-    const row = getRowContainer(node);
+  function smoothHide(card) {
+    const row = toCard(card);
     if (!row || row.classList.contains("hidejobs-sponsored-hidden")) return;
 
     const h = row.offsetHeight + "px";
@@ -85,6 +94,12 @@
     });
   }
 
+  function unhideCard(card) {
+    const row = toCard(card);
+    row?.classList?.remove("hidejobs-sponsored-hidden");
+    if (row) row.removeAttribute("style");
+  }
+
   /* -------------------- CORE HIDE/SHOW -------------------- */
   function hideSponsored() {
     if (!isIndeedJobPage()) return;
@@ -94,10 +109,7 @@
 
     const cards = getSponsoredCards();
     cards.forEach((card) => {
-      const row = getRowContainer(card);
-      if (!row || row.classList.contains("hidejobs-sponsored-hidden")) return;
-
-      const id = getJobId(card) || row.innerText.trim();
+      const id = getJobId(card) || card.innerText.trim();
       if (!countedIds.has(id)) {
         countedIds.add(id);
         hiddenCount++;
@@ -111,10 +123,7 @@
 
   function showSponsored() {
     const cards = getSponsoredCards();
-    cards.forEach((card) => {
-      const row = getRowContainer(card);
-      row?.classList?.remove("hidejobs-sponsored-hidden");
-    });
+    cards.forEach(unhideCard);
 
     hiddenCount = 0;
     countedIds.clear();
@@ -124,23 +133,21 @@
 
   function hideNewSponsoredIfAny(muts) {
     if (!isHidden) return;
-    let found = false;
+
+    let shouldRecheck = false;
     for (const m of muts) {
       m.addedNodes?.forEach((n) => {
         if (n?.nodeType !== 1) return;
-        if (n.matches?.(".sponsoredJob") || n.querySelector?.(".sponsoredJob")) {
-          found = true;
+        if (n.matches?.(".maybeSponsoredJob") || n.querySelector?.(".maybeSponsoredJob")) {
+          shouldRecheck = true;
         }
       });
     }
-    if (!found) return;
+    if (!shouldRecheck) return;
 
     const cards = getSponsoredCards();
     cards.forEach((card) => {
-      const row = getRowContainer(card);
-      if (!row || row.classList.contains("hidejobs-sponsored-hidden")) return;
-
-      const id = getJobId(card) || row.innerText.trim();
+      const id = getJobId(card) || card.innerText.trim();
       if (!countedIds.has(id)) {
         countedIds.add(id);
         hiddenCount++;
@@ -164,9 +171,18 @@
   /* -------------------- OBSERVER -------------------- */
   function watchList() {
     if (listObserver) return;
-    const root = document.getElementById("mosaic-provider-jobcards") || document.body;
+    const root =
+      document.getElementById("mosaic-provider-jobcards") ||
+      document.querySelector('[role="main"]') ||
+      document.body;
+
     listObserver = new MutationObserver((m) => hideNewSponsoredIfAny(m));
-    listObserver.observe(root, { childList: true, subtree: true });
+    listObserver.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
   }
 
   function unwatchList() {
@@ -211,7 +227,6 @@
   chrome?.storage?.onChanged?.addListener((changes, area) => {
     if (area !== "local") return;
 
-    // Toggle from React FilterBadge
     if ("indeedSponsoredHidden" in changes) {
       const on = !!changes.indeedSponsoredHidden.newValue;
       if (!isIndeedJobPage()) return;
@@ -223,10 +238,6 @@
         unwatchList();
       }
     }
-
-    // If someone hides the badge globally, we still keep functionality;
-    // the React badge controls visibility separately from behavior.
-    // (No DOM badge here—React handles UI.)
   });
 
   /* -------------------- URL POLLER (SPA) -------------------- */

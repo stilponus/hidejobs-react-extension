@@ -1,27 +1,29 @@
-// public/content-keywords-indeed.js
+// public/content-keywords-glassdoor.js
 /************************************************************
- * HideJobs – Indeed "Keywords" helper (hide by keywords; no UI)
+ * HideJobs – Glassdoor "Keywords" helper (hide by keywords; no UI)
  *
- * Works with the same storage + panel used on LinkedIn:
+ * Shares storage + panel state with LinkedIn/Indeed:
  *   - filterKeywords         : string[]  (keywords list)
  *   - userTextHidden         : boolean   (master ON/OFF for keyword hiding)
  *   - keywordHiddenCount     : number    (count of hidden jobs)
  *   - countedKeywordJobIds   : string[]  (ids we've already counted)
  *
- * Page scope: Indeed job list pages only (excludes employers/profile/etc)
+ * Page scope: Glassdoor job list/search pages (excludes companies/overview/etc)
  ************************************************************/
 
 (() => {
-  console.log("[HideJobs] indeed keywords logic loaded:", location.href);
+  console.log("[HideJobs] glassdoor keywords logic loaded:", location.href);
 
-  // Inject CSS once so the class we add actually hides the cards
+  /* ──────────────────────────────────────────────────────────
+   * One-time CSS so our class actually hides cards
+   * ────────────────────────────────────────────────────────── */
   function ensureHideStyleInjected() {
-    if (document.getElementById("hidejobs-keyword-style")) return;
+    if (document.getElementById("hidejobs-gd-keyword-style")) return;
     const style = document.createElement("style");
-    style.id = "hidejobs-keyword-style";
+    style.id = "hidejobs-gd-keyword-style";
     style.textContent = `
-      .hidejobs-hidden-by-keywords { 
-        display: none !important; 
+      .hidejobs-gd-hidden-by-keywords {
+        display: none !important;
       }
     `;
     (document.head || document.documentElement).appendChild(style);
@@ -29,54 +31,36 @@
   ensureHideStyleInjected();
 
   /* ──────────────────────────────────────────────────────────
-   * Page detection – allow-list for Indeed job list pages
+   * Page detection – allow-list for Glassdoor job list pages
    * ────────────────────────────────────────────────────────── */
-  function isIndeedJobPage(href = location.href) {
+  function isGlassdoorJobPage(href = location.href) {
     const url = new URL(href);
     const host = url.hostname.toLowerCase();
     const path = url.pathname.toLowerCase();
 
-    if (!host.includes("indeed.")) return false;
+    if (!host.includes("glassdoor.")) return false;
 
-    const blockedPaths = [
-      "/companies",
-      "/career/salaries",
-      "/about",
-      "/help",
-      "/legal",
-      "/cmp",
-      "/survey",
-      "/career",
-      "/viewjob",
-      "/notifications",
-      "/contributions",
-      "/career-advice",
-      "/career-services",
+    // Exclude obvious non-job sections
+    const blocked = [
+      "/overview", "/benefits", "/photos", "/reviews",
+      "/faq", "/interview", "/salary", "/salaries",
+      "/employers", "/employer", "/compare", "/insights",
+      "/blog", "/community", "/about", "/help", "/partners"
     ];
-    if (blockedPaths.some((p) => path.startsWith(p))) return false;
+    if (blocked.some((p) => path.startsWith(p))) return false;
 
-    const blockedHosts = new Set([
-      "employers.indeed.com",
-      "profile.indeed.com",
-      "myjobs.indeed.com",
-      "dd.indeed.com",
-      "secure.indeed.com",
-      "smartapply.indeed.com",
-      "messages.indeed.com",
-    ]);
-    if (blockedHosts.has(host)) return false;
-
+    // Typical job-search paths include /Job/ or /job-listing or /Job/jobs.htm
     return true;
   }
 
   /* ──────────────────────────────────────────────────────────
-   * Utilities
+   * Small utilities
    * ────────────────────────────────────────────────────────── */
   function debounce(fn, delay) {
     let t;
-    return function (...args) {
+    return (...args) => {
       clearTimeout(t);
-      t = setTimeout(() => fn.apply(this, args), delay);
+      t = setTimeout(() => fn(...args), delay);
     };
   }
 
@@ -96,14 +80,38 @@
     });
   }
 
+  /* ──────────────────────────────────────────────────────────
+   * Get job items (row + a stable-ish id)
+   * Glassdoor commonly renders each result as:
+   *  - <li data-test="jobListing" data-jobid="...">...</li>
+   *  - Sometimes div[data-test="jobListing"] (SSR/AB variants)
+   * We’ll normalize to a "card" element & derive an id.
+   * ────────────────────────────────────────────────────────── */
   function getJobElements() {
-    // Indeed list items: <a data-jk> lives inside each result card.
-    // We'll operate on the closest <li> if present, otherwise the slider item.
-    const anchors = document.querySelectorAll('a[data-jk]');
+    const nodeList = document.querySelectorAll(
+      'li[data-test="jobListing"], div[data-test="jobListing"]'
+    );
     const items = [];
-    anchors.forEach((a) => {
-      const card = a.closest("li") || a.closest('div[data-testid="slider_item"]') || a;
-      if (card) items.push({ anchor: a, card });
+    nodeList.forEach((card) => {
+      // Prefer data-jobid if present
+      let id =
+        card.getAttribute("data-jobid") ||
+        card.getAttribute("data-id") ||
+        null;
+
+      // Fallback: look for a link we can key on
+      if (!id) {
+        const a =
+          card.querySelector('a[data-test="job-link"]') ||
+          card.querySelector('a[href*="/job-listing"]') ||
+          card.querySelector('a[href*="/partner/jobListing"]') ||
+          card.querySelector("a[href]");
+        if (a) {
+          id = a.getAttribute("data-id") || a.getAttribute("data-jobid") || a.id || a.href || null;
+        }
+      }
+
+      items.push({ card, id: id || card.innerText.slice(0, 160) });
     });
     return items;
   }
@@ -114,10 +122,10 @@
   let lastUrl = location.href;
   let obs = null;
 
-  let isOn = false;                // mirrors userTextHidden
-  let keywords = [];               // filterKeywords (array)
-  let hiddenKeywordCount = 0;      // keywordHiddenCount (number)
-  let countedKeywordJobIds = new Set(); // countedKeywordJobIds (Set of strings)
+  let isOn = false;                    // mirrors userTextHidden
+  let keywords = [];                   // filterKeywords (array)
+  let hiddenKeywordCount = 0;          // keywordHiddenCount (number)
+  let countedKeywordJobIds = new Set();// countedKeywordJobIds (Set of strings)
 
   /* ──────────────────────────────────────────────────────────
    * Persistence helpers (count + ids)
@@ -134,59 +142,57 @@
    * ────────────────────────────────────────────────────────── */
   function hideKeywordJobListings() {
     if (!keywords.length) return;
-
     const items = getJobElements();
 
-    for (const { anchor, card } of items) {
-      // Don't double-hide
-      if (card.classList.contains("hidejobs-hidden-by-keywords")) continue;
+    for (const { card, id } of items) {
+      // Skip already hidden cards to avoid recount
+      if (card.classList.contains("hidejobs-gd-hidden-by-keywords")) continue;
 
       const text = (card.innerText || "").toLowerCase();
       if (!text) continue;
 
       if (matchesAnyKeyword(text, keywords)) {
-        card.classList.add("hidejobs-hidden-by-keywords");
+        card.classList.add("hidejobs-gd-hidden-by-keywords");
 
-        const jobId = anchor.getAttribute("data-jk") || text.slice(0, 128);
-        if (jobId && !countedKeywordJobIds.has(jobId)) {
-          countedKeywordJobIds.add(jobId);
+        if (id && !countedKeywordJobIds.has(id)) {
+          countedKeywordJobIds.add(id);
           hiddenKeywordCount++;
         }
       }
     }
 
     persistCountState();
+
+    // Optional parity with your other overlays/UI hooks:
+    window.hideJobsUtils?.applyOverlaysFromLocalStorage?.();
+    if (window.hideJobsUI?.checkHideButtons) window.hideJobsUI.checkHideButtons();
   }
 
   function restoreJobsByKeyword(keyword) {
     const items = getJobElements();
     const kw = String(keyword || "").toLowerCase();
 
-    for (const { anchor, card } of items) {
+    for (const { card, id } of items) {
       const text = (card.innerText || "").toLowerCase();
       if (text.includes(kw)) {
-        // Unhide visually
-        card.classList.remove("hidejobs-hidden-by-keywords");
+        card.classList.remove("hidejobs-gd-hidden-by-keywords");
 
-        // Adjust count if this job was previously counted
-        const jobId = anchor.getAttribute("data-jk") || text.slice(0, 128);
-        if (jobId && countedKeywordJobIds.has(jobId)) {
-          countedKeywordJobIds.delete(jobId);
+        if (id && countedKeywordJobIds.has(id)) {
+          countedKeywordJobIds.delete(id);
           hiddenKeywordCount = Math.max(0, hiddenKeywordCount - 1);
         }
       }
     }
 
     persistCountState();
+    if (window.hideJobsUI?.checkHideButtons) window.hideJobsUI.checkHideButtons();
   }
 
   function restoreAllKeywordJobs() {
     const items = getJobElements();
-
     for (const { card } of items) {
-      card.classList.remove("hidejobs-hidden-by-keywords");
+      card.classList.remove("hidejobs-gd-hidden-by-keywords");
     }
-
     hiddenKeywordCount = 0;
     countedKeywordJobIds.clear();
     persistCountState();
@@ -221,11 +227,14 @@
    * ────────────────────────────────────────────────────────── */
   const debouncedApply = debounce(() => {
     if (isOn && keywords.length > 0) hideKeywordJobListings();
-  }, 50);
+  }, 60);
 
   function bindObserver() {
+    // Try the job list root first; fall back to main/document
     const container =
-      document.querySelector("#mosaic-provider-jobcards") ||
+      document.querySelector('[data-test="jlGrid"]') ||          // older GD
+      document.querySelector('[data-test="job-feed"]') ||        // newer GD
+      document.querySelector('[data-test="JobsList"]') ||        // variant
       document.querySelector('[role="main"]') ||
       document.body;
 
@@ -252,7 +261,7 @@
    * Boot / URL watcher / Storage wiring
    * ────────────────────────────────────────────────────────── */
   function applyStoredUserTextState() {
-    if (!isIndeedJobPage()) {
+    if (!isGlassdoorJobPage()) {
       unbindObserver();
       return;
     }
@@ -265,7 +274,9 @@
 
         // Restore count bookkeeping
         hiddenKeywordCount = typeof res?.keywordHiddenCount === "number" ? res.keywordHiddenCount : 0;
-        countedKeywordJobIds = new Set(Array.isArray(res?.countedKeywordJobIds) ? res.countedKeywordJobIds : []);
+        countedKeywordJobIds = new Set(
+          Array.isArray(res?.countedKeywordJobIds) ? res.countedKeywordJobIds : []
+        );
 
         if (isOn && keywords.length > 0) {
           hideKeywordJobListings();

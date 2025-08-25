@@ -31,11 +31,12 @@ export default function BadgesHost() {
     typeof location !== "undefined" ? location.hostname.toLowerCase() : "";
   const isLinkedIn = useMemo(() => host.includes("linkedin.com"), [host]);
   const isIndeed = useMemo(() => /(^|\.)indeed\./i.test(host), [host]);
+  const isGlassdoor = useMemo(() => /(^|\.)glassdoor\./i.test(host), [host]); // ← added
 
   // RIGHT stack position → top differs per host
   const rightContainerStyle = {
     position: "fixed",
-    top: isIndeed ? "80px" : "64px", // LinkedIn=64, Indeed=80
+    top: isIndeed || isGlassdoor ? "80px" : "64px", // LinkedIn=64, Indeed/Glassdoor=80
     right: compact ? "-19px" : "5px",
     zIndex: 9995,
     display: "flex",
@@ -72,6 +73,11 @@ export default function BadgesHost() {
       { key: "indeedApplied", label: "Applied", color: "applied" },
       { key: "indeedSponsored", label: "Sponsored", color: "promoted" },
       { key: "indeedCompanies", label: "Companies", color: "companies" },
+    ];
+  } else if (isGlassdoor) { // ← added
+    // Glassdoor badges: Applied (Glassdoor)
+    badges = [
+      { key: "glassdoorApplied", label: "Applied", color: "applied" },
     ];
   }
 

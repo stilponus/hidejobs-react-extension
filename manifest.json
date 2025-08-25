@@ -109,6 +109,26 @@
         "content-keywords-indeed.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.glassdoor.com/*",
+        "https://*.glassdoor.co.uk/*",
+        "https://*.glassdoor.ca/*",
+        "https://*.glassdoor.de/*",
+        "https://*.glassdoor.fr/*",
+        "https://*.glassdoor.es/*",
+        "https://*.glassdoor.it/*",
+        "https://*.glassdoor.nl/*",
+        "https://*.glassdoor.ie/*",
+        "https://*.glassdoor.com.au/*",
+        "https://*.glassdoor.co.in/*"
+      ],
+      "js": [
+        "content-keywords-glassdoor.js",
+        "content-applied-glassdoor.js"
+      ],
+      "run_at": "document_idle"
     }
   ]
 }

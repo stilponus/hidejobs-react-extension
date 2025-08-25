@@ -50,7 +50,7 @@ function isIndeedJobPage(href = location.href) {
     "/cmp",
     "/survey",
     "/career",
-    "/viewjob",          // single posting page (not the list)
+    "/viewjob", // single posting page (not the list)
     "/notifications",
     "/contributions",
     "/career-advice",
@@ -70,6 +70,43 @@ function isIndeedJobPage(href = location.href) {
   if (blockedHosts.has(host)) return false;
 
   // Treat everything else on indeed.* as the job search/list pages
+  return true;
+}
+
+// NEW: Glassdoor job-page allow-list
+function isGlassdoorJobPage(href = location.href) {
+  const url = new URL(href);
+  const host = url.hostname.toLowerCase();
+  const path = url.pathname.toLowerCase();
+
+  if (!host.includes("glassdoor.")) return false;
+
+  // Exclude employer center/help and obvious non-job sections
+  const blockedHosts = new Set([
+    "employercenter.glassdoor.com",
+    "help.glassdoor.com",
+  ]);
+  if (blockedHosts.has(host)) return false;
+
+  const blockedPaths = [
+    "/overview",
+    "/benefits",
+    "/salary",
+    "/salaries",
+    "/reviews",
+    "/interview",
+    "/photos",
+    "/faq",
+    "/about",
+    "/compare",
+    "/comparisons",
+    "/members", // signed-in misc pages
+    "/profile",
+  ];
+  if (blockedPaths.some((p) => path.startsWith(p))) return false;
+
+  // Treat everything else on glassdoor.* as job search/list pages
+  // Typical job pages include /Job/, /Jobs/, /job-listing/, /Job/jobs.htm
   return true;
 }
 
@@ -214,15 +251,16 @@ function clearRepostedBadgesFromDOM() {
     }, []);
 
     // Keep hours panel LinkedIn-only (UNCHANGED)
-    const shouldShowHoursPanel = isJobPage(href) && showFilterByHours;    // LinkedIn only
+    const shouldShowHoursPanel = isJobPage(href) && showFilterByHours; // LinkedIn only
 
-    // ✅ Show the keyword panel on LinkedIn OR Indeed, using the same toggle/state
+    // ✅ Show the keyword panel on LinkedIn OR Indeed OR Glassdoor, using the same toggle/state
     const shouldShowKeywordPanel =
-      (isLinkedInJobPage(href) || isIndeedJobPage(href)) && showKeywords;
+      (isLinkedInJobPage(href) || isIndeedJobPage(href) || isGlassdoorJobPage(href)) &&
+      showKeywords;
 
-    // NEW: badges on LinkedIn OR Indeed
+    // Show badges on LinkedIn, Indeed, and Glassdoor
     const shouldShowBadges =
-      isLinkedInJobPage(href) || isIndeedJobPage(href);
+      isLinkedInJobPage(href) || isIndeedJobPage(href) || isGlassdoorJobPage(href);
 
     return (
       <StyleProvider container={shadowRoot}>
@@ -268,7 +306,7 @@ function clearRepostedBadgesFromDOM() {
           {/* Main side panel */}
           <HideJobsPanelShell />
 
-          {/* Badge stack: now shows on LinkedIn job pages OR Indeed job pages */}
+          {/* Badge stack: LinkedIn OR Indeed (unchanged) */}
           {shouldShowBadges && <BadgesHost />}
 
           {/* Floating panels */}
