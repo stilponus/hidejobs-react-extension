@@ -306,7 +306,7 @@ export default function HideJobsFilters() {
 
   // Rows
   const rows = [
-    { key: "dismissed", label: "Dismissed", tourKey: "dismissed" }, // header question mark will open this tour
+    { key: "dismissed", label: "Dismissed" }, // header question mark will open this tour
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
     { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" }, // keep per-row tour for Applied only
