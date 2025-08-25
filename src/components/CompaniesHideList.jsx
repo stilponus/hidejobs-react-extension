@@ -31,19 +31,19 @@ export default function CompaniesHideList() {
 
   // subscription
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [subscriptionLoading, setSubscriptionLoading] = useState(true); // show skeleton while loading
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
 
-  // companies feature toggle (synced with Filters panel switch "companies")
+  // companies feature toggle
   const [companiesFeatureOn, setCompaniesFeatureOn] = useState(false);
 
-  // breadcrumb: show Back button only if user came from Filters → List
+  // breadcrumb back button
   const [showBackToFilters, setShowBackToFilters] = useState(false);
 
   const normalize = (s) => (s || "").trim().toLowerCase();
   const ciSort = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
   const normalizedHas = (list, name) => list.some((x) => normalize(x) === normalize(name));
 
-  // Load user's hidden companies & react to changes
+  // hidden companies load
   useEffect(() => {
     chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
       const list = (res?.hiddenCompanies || []).slice().sort(ciSort);
@@ -61,7 +61,7 @@ export default function CompaniesHideList() {
     return () => chrome?.storage?.onChanged?.removeListener(onChange);
   }, []);
 
-  // subscription + feature toggle (companies): load cached + force fresh on mount + listen
+  // subscription state + feature toggle load
   useEffect(() => {
     if (!chromeApi) {
       setSubscriptionLoading(false);
@@ -71,7 +71,7 @@ export default function CompaniesHideList() {
     chromeApi.storage.local.get(["isSubscribed", "companiesBadgeVisible"], (res) => {
       setIsSubscribed(!!res?.isSubscribed);
       setCompaniesFeatureOn(!!res?.companiesBadgeVisible);
-      setSubscriptionLoading(false); // stop skeleton after initial cached read
+      setSubscriptionLoading(false);
     });
 
     chrome.runtime?.sendMessage?.(
@@ -92,7 +92,7 @@ export default function CompaniesHideList() {
     return () => chromeApi.storage.onChanged.removeListener(onStore);
   }, [chromeApi]);
 
-  // breadcrumb: read and clear one-time flag on mount
+  // breadcrumb flag
   useEffect(() => {
     chrome?.storage?.local?.get(["companies_came_from_filters"], (res) => {
       const came = !!res?.companies_came_from_filters;
@@ -103,7 +103,7 @@ export default function CompaniesHideList() {
     });
   }, []);
 
-  // Load Top 5: use cache if fresh, else fetch via background and refresh cache
+  // top 5 load
   useEffect(() => {
     let aborted = false;
 
@@ -114,7 +114,9 @@ export default function CompaniesHideList() {
         .sort(
           (x, y) =>
             (Number(y.hiddenByUsersCount) || 0) - (Number(x.hiddenByUsersCount) || 0) ||
-            (x.companyName || "").localeCompare(y.companyName || "", undefined, { sensitivity: "base" })
+            (x.companyName || "").localeCompare(y.companyName || "", undefined, {
+              sensitivity: "base",
+            })
         )
         .map((item, idx) => ({ ...item, rank: idx + 1 }));
       setTopCompanies(sorted);
@@ -157,7 +159,6 @@ export default function CompaniesHideList() {
     };
   }, []);
 
-  // Hide Top 5 rows already present in user's list (but keep original rank numbers)
   const filteredTop = React.useMemo(
     () => topCompanies.filter((t) => !normalizedHas(companies, t.companyName)),
     [topCompanies, companies]
@@ -206,7 +207,9 @@ export default function CompaniesHideList() {
 
         chrome?.storage?.local?.get([TOP_CACHE_KEY], (r) => {
           const cached = Array.isArray(r?.[TOP_CACHE_KEY]) ? r[TOP_CACHE_KEY] : [];
-          const next = cached.filter((item) => normalize(item.companyName) !== normalize(raw));
+          const next = cached.filter(
+            (item) => normalize(item.companyName) !== normalize(raw)
+          );
           chrome?.storage?.local?.set({ [TOP_CACHE_KEY]: next });
         });
       });
@@ -219,12 +222,13 @@ export default function CompaniesHideList() {
       hidejobs_panel_view: "filters",
     });
     try {
-      const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view: "filters" } });
+      const evt = new CustomEvent("hidejobs-panel-set-view", {
+        detail: { view: "filters" },
+      });
       window.dispatchEvent(evt);
     } catch { }
   };
 
-  // Toggle handler for "Companies" feature
   const onCompaniesToggle = (checked) => {
     if (!isSubscribed) return;
     setCompaniesFeatureOn(checked);
@@ -245,7 +249,7 @@ export default function CompaniesHideList() {
     <div className="space-y-3">
       {contextHolder}
 
-      {/* Title row with optional Back button on the left */}
+      {/* Title row */}
       <div className="flex items-center justify-between -mt-1">
         <div className="flex items-center gap-2">
           {showBackToFilters && (
@@ -258,12 +262,17 @@ export default function CompaniesHideList() {
               />
             </Tooltip>
           )}
-          <h2 className="text-lg font-semibold text-hidejobs-700">Hidden Companies</h2>
+          <h2 className="text-lg font-semibold text-hidejobs-700">
+            Hidden Companies
+          </h2>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className={`text-sm ${isSubscribed ? "text-gray-500" : "text-gray-400"}`}>
+            <span
+              className={`text-sm ${isSubscribed ? "text-gray-500" : "text-gray-400"
+                }`}
+            >
               On/Off
             </span>
             {isSubscribed ? (
@@ -274,7 +283,11 @@ export default function CompaniesHideList() {
               />
             ) : (
               <Tooltip
-                title={<span style={{ color: "#333", fontWeight: 600 }}>Subscribe to unlock</span>}
+                title={
+                  <span style={{ color: "#333", fontWeight: 600 }}>
+                    Subscribe to unlock
+                  </span>
+                }
                 color="#feb700"
                 placement="top"
               >
@@ -285,7 +298,16 @@ export default function CompaniesHideList() {
         </div>
       </div>
 
-      {/* ADD FORM — now right after the title */}
+      {/* Subscription loading skeleton OR Subscribe button — NOW below the title */}
+      {subscriptionLoading ? (
+        <div className="rounded-md border border-gray-200 p-3">
+          <Skeleton active paragraph={{ rows: 2 }} />
+        </div>
+      ) : (
+        !isSubscribed && <SubscribeButton />
+      )}
+
+      {/* ADD FORM — moved BELOW subscribe */}
       <div className="flex items-center gap-2">
         <Input
           value={newCompany}
@@ -304,20 +326,14 @@ export default function CompaniesHideList() {
         </Button>
       </div>
 
-      {/* Subscription loading skeleton OR Subscribe button (kept, appears after Add form) */}
-      {subscriptionLoading ? (
-        <div className="rounded-md border border-gray-200 p-3">
-          <Skeleton active paragraph={{ rows: 2 }} />
-        </div>
-      ) : (
-        !isSubscribed && <SubscribeButton />
-      )}
-
-      {/* COMPANIES LIST or EMPTY (with Ant Design Empty) */}
+      {/* Companies list / Empty */}
       {companies.length > 0 ? (
         <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
           {companies.map((c) => (
-            <li key={c} className="flex items-center justify-between px-3 py-2">
+            <li
+              key={c}
+              className="flex items-center justify-between px-3 py-2"
+            >
               <span className="truncate">{c}</span>
               <Button
                 type="text"
@@ -340,8 +356,10 @@ export default function CompaniesHideList() {
                 <div>No companies are hidden yet.</div>
                 <div className="mt-1 text-xs">
                   Click{" "}
-                  <EyeInvisibleFilled style={{ color: "#28507c", fontSize: 14 }} /> next to a
-                  company on job pages to hide it — or add one above.
+                  <EyeInvisibleFilled
+                    style={{ color: "#28507c", fontSize: 14 }}
+                  />{" "}
+                  next to a company on job pages to hide it — or add one above.
                 </div>
               </div>
             }
@@ -349,10 +367,9 @@ export default function CompaniesHideList() {
         </div>
       )}
 
-      {/* Divider with "or" */}
       <Divider plain>or</Divider>
 
-      {/* TOP 5 BLOCK (moved below the divider) */}
+      {/* Top 5 */}
       {(loadingTop || filteredTop.length > 0) && (
         <div className="mt-1">
           <div className="text-sm font-semibold text-hidejobs-700 mb-1">
@@ -365,12 +382,19 @@ export default function CompaniesHideList() {
           ) : (
             <ul className="rounded-md border border-gray-200 divide-y divide-gray-100">
               {filteredTop.map((item) => (
-                <li key={item.companyName} className="flex items-center justify-between px-3 py-2">
+                <li
+                  key={item.companyName}
+                  className="flex items-center justify-between px-3 py-2"
+                >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-6 shrink-0 text-gray-400 text-xs">#{item.rank}</span>
+                    <span className="w-6 shrink-0 text-gray-400 text-xs">
+                      #{item.rank}
+                    </span>
                     <span className="truncate">
                       {item.companyName}{" "}
-                      <span className="text-gray-400 text-xs">({item.hiddenByUsersCount})</span>
+                      <span className="text-gray-400 text-xs">
+                        ({item.hiddenByUsersCount})
+                      </span>
                     </span>
                   </div>
                   <Button
