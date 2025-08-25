@@ -53,6 +53,6 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
-    chunkSizeWarningLimit: 1000 // ✅ increased limit from 500 to 1000 kB
+    chunkSizeWarningLimit: 1500 // ✅ increased limit from 500 to 1000 kB
   }
 });

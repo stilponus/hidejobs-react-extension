@@ -1,6 +1,6 @@
 // src/components/CompaniesHideList.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Button, Input, message, Divider, Skeleton, Tooltip, Switch } from "antd";
+import { Button, Input, message, Divider, Skeleton, Tooltip, Switch, Empty } from "antd";
 import {
   LeftOutlined,
   CloseOutlined,
@@ -285,7 +285,26 @@ export default function CompaniesHideList() {
         </div>
       </div>
 
-      {/* Subscription loading skeleton OR Subscribe button */}
+      {/* ADD FORM — now right after the title */}
+      <div className="flex items-center gap-2">
+        <Input
+          value={newCompany}
+          onChange={(e) => setNewCompany(e.target.value)}
+          onPressEnter={() => (isSubscribed ? addOne() : null)}
+          placeholder="Add company (e.g., Amazon)"
+          disabled={!isSubscribed}
+        />
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => addOne()}
+          disabled={!isSubscribed}
+        >
+          Add
+        </Button>
+      </div>
+
+      {/* Subscription loading skeleton OR Subscribe button (kept, appears after Add form) */}
       {subscriptionLoading ? (
         <div className="rounded-md border border-gray-200 p-3">
           <Skeleton active paragraph={{ rows: 2 }} />
@@ -294,91 +313,79 @@ export default function CompaniesHideList() {
         !isSubscribed && <SubscribeButton />
       )}
 
-      {/* Interactive area (dimmed when unsubscribed) */}
-      <div className="relative">
-        <div className={!isSubscribed ? "opacity-50 pointer-events-none" : ""}>
-          {/* Empty state text is ALWAYS shown */}
-          {companies.length === 0 && (
-            <>
-              <div className="text-gray-500 text-sm">No companies are hidden yet.</div>
-              <div className="text-gray-500 text-sm flex items-center gap-1">
-                Click <EyeInvisibleFilled style={{ color: "#28507c", fontSize: 18 }} /> next to a
-                company to hide it.
+      {/* COMPANIES LIST or EMPTY (with Ant Design Empty) */}
+      {companies.length > 0 ? (
+        <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
+          {companies.map((c) => (
+            <li key={c} className="flex items-center justify-between px-3 py-2">
+              <span className="truncate">{c}</span>
+              <Button
+                type="text"
+                size="small"
+                title="Unhide"
+                aria-label={`Unhide ${c}`}
+                icon={<CloseOutlined />}
+                onClick={() => removeOne(c)}
+                disabled={!isSubscribed}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="rounded-md border border-gray-200 px-4">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <div className="text-gray-500">
+                <div>No companies are hidden yet.</div>
+                <div className="mt-1 text-xs">
+                  Click{" "}
+                  <EyeInvisibleFilled style={{ color: "#28507c", fontSize: 14 }} /> next to a
+                  company on job pages to hide it — or add one above.
+                </div>
               </div>
-            </>
-          )}
+            }
+          />
+        </div>
+      )}
 
-          {companies.length > 0 && (
-            <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
-              {companies.map((c) => (
-                <li key={c} className="flex items-center justify-between px-3 py-2">
-                  <span className="truncate">{c}</span>
+      {/* Divider with "or" */}
+      <Divider plain>or</Divider>
+
+      {/* TOP 5 BLOCK (moved below the divider) */}
+      {(loadingTop || filteredTop.length > 0) && (
+        <div className="mt-1">
+          <div className="text-sm font-semibold text-hidejobs-700 mb-1">
+            Top 5 Hidden Companies
+          </div>
+          {loadingTop ? (
+            <div className="rounded-md border border-gray-200 p-3">
+              <Skeleton active paragraph={{ rows: 2 }} />
+            </div>
+          ) : (
+            <ul className="rounded-md border border-gray-200 divide-y divide-gray-100">
+              {filteredTop.map((item) => (
+                <li key={item.companyName} className="flex items-center justify-between px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-6 shrink-0 text-gray-400 text-xs">#{item.rank}</span>
+                    <span className="truncate">
+                      {item.companyName}{" "}
+                      <span className="text-gray-400 text-xs">({item.hiddenByUsersCount})</span>
+                    </span>
+                  </div>
                   <Button
-                    type="text"
                     size="small"
-                    title="Unhide"
-                    aria-label={`Unhide ${c}`}
-                    icon={<CloseOutlined />}
-                    onClick={() => removeOne(c)}
+                    onClick={() => addOne(item.companyName)}
                     disabled={!isSubscribed}
-                  />
+                  >
+                    Add
+                  </Button>
                 </li>
               ))}
             </ul>
           )}
-
-          {/* Divider with "or" is ALWAYS shown */}
-          <Divider plain>or</Divider>
-
-          <div className="flex items-center gap-2">
-            <Input
-              value={newCompany}
-              onChange={(e) => setNewCompany(e.target.value)}
-              onPressEnter={() => (isSubscribed ? addOne() : null)}
-              placeholder="Add company (e.g., Amazon)"
-              disabled={!isSubscribed}
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => addOne()}
-              disabled={!isSubscribed}
-            >
-              Add
-            </Button>
-          </div>
-
-          {(loadingTop || filteredTop.length > 0) && (
-            <div className="mt-4">
-              <div className="text-sm font-semibold text-hidejobs-700 mb-1">
-                Top 5 Hidden Companies
-              </div>
-              {loadingTop ? (
-                <div className="rounded-md border border-gray-200 p-3">
-                  <Skeleton active paragraph={{ rows: 2 }} />
-                </div>
-              ) : (
-                <ul className="rounded-md border border-gray-200 divide-y divide-gray-100">
-                  {filteredTop.map((item) => (
-                    <li key={item.companyName} className="flex items-center justify-between px-3 py-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-6 shrink-0 text-gray-400 text-xs">#{item.rank}</span>
-                        <span className="truncate">
-                          {item.companyName}{" "}
-                          <span className="text-gray-400 text-xs">({item.hiddenByUsersCount})</span>
-                        </span>
-                      </div>
-                      <Button size="small" onClick={() => addOne(item.companyName)} disabled={!isSubscribed}>
-                        Add
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

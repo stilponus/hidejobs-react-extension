@@ -1,6 +1,7 @@
 // src/components/HideJobsFilters.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Switch, Tooltip, Button } from "antd";
+import { Switch, Tooltip, Button, Empty, Space } from "antd";
+
 import {
   CrownFilled,
   EyeInvisibleFilled,
@@ -16,7 +17,7 @@ import {
 import SubscribeButton from "./SubscribeButton";
 import InteractiveTour from "./Tours/InteractiveTour";           // Dismissed-only tour
 import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";   // Applied (LinkedIn)-only tour
-import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";   // ← NEW: Companies tour
+import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";   // ← Companies tour
 
 const FILTER_KEYS = [
   "dismissed",
@@ -52,6 +53,23 @@ function getChrome() {
   return null;
 }
 
+// Detect which site the user is on
+function detectSite() {
+  const href = (typeof location !== "undefined" ? location.href : "") || "";
+  const host = (typeof location !== "undefined" ? location.hostname : "") || "";
+
+  const isLinkedIn =
+    host.includes("linkedin.com") &&
+    (/\/jobs\//.test(href) || href.includes("/jobs") || href.includes("/comm/"));
+  const isIndeed = host.includes("indeed.");
+  const isGlassdoor = host.includes("glassdoor.");
+
+  if (isLinkedIn) return "linkedin";
+  if (isIndeed) return "indeed";
+  if (isGlassdoor) return "glassdoor";
+  return "other";
+}
+
 // Removes reposted badges immediately and unhides any rows we hid
 function clearRepostedBadgesFromDOM() {
   const cards = document.querySelectorAll(
@@ -80,8 +98,39 @@ export default function HideJobsFilters() {
   // ✅ Separate states for separate tours
   const [dismissedTourOpen, setDismissedTourOpen] = useState(false);
   const [appliedTourOpen, setAppliedTourOpen] = useState(false);
-  const [companiesTourOpen, setCompaniesTourOpen] = useState(false); // ← NEW
+  const [companiesTourOpen, setCompaniesTourOpen] = useState(false);
   const [companiesTourStep, setCompaniesTourStep] = useState(1);
+
+  // ─────────────────────────────────────────────────────────────
+  // Site-specific visibility
+  // ─────────────────────────────────────────────────────────────
+  const site = useMemo(detectSite, []);
+  const visibleKeysForSite = useMemo(() => {
+    if (site === "linkedin") {
+      return new Set([
+        "dismissed",
+        "promoted",
+        "viewed",
+        "applied",         // Applied (LinkedIn)
+        "companies",
+        "userText",        // Keywords
+        "filterByHours",   // Filter by Hours
+        "repostedGhost",   // Reposted Jobs
+      ]);
+    }
+    if (site === "indeed") {
+      return new Set([
+        "indeedSponsored", // Sponsored (Indeed)
+        "indeedApplied",   // Applied (Indeed)
+      ]);
+    }
+    if (site === "glassdoor") {
+      return new Set([
+        "glassdoorApplied", // Applied (Glassdoor)
+      ]);
+    }
+    return new Set(); // other pages => show nothing but a message
+  }, [site]);
 
   const broadcastFiltersChanged = (nextValues) => {
     try {
@@ -304,23 +353,29 @@ export default function HideJobsFilters() {
     } catch { }
   };
 
-  // Rows
+  // All possible rows (we will filter them per site below)
   const rows = [
-    { key: "dismissed", label: "Dismissed" }, // header question mark will open this tour
+    { key: "dismissed", label: "Dismissed" }, // header question mark opens its tour
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
-    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" }, // keep per-row tour for Applied only
-    { key: "companies", label: "Companies", premium: true, tourKey: "companies" }, // ← NEW: add tourKey for Companies
+
+    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" },
+    { key: "companies", label: "Companies", premium: true, tourKey: "companies" },
     { key: "userText", label: "Keywords", premium: true },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "repostedGhost", label: "Reposted Jobs", premium: true },
+
     { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
-    { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
     { key: "indeedApplied", label: "Applied (Indeed)", premium: true },
+
+    { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
   ];
 
-  const freeRows = rows.filter((r) => !r.premium);
-  const premiumRows = rows.filter((r) => r.premium);
+  // Filter rows based on the current site
+  const siteFilteredRows = rows.filter((r) => visibleKeysForSite.has(r.key));
+
+  const freeRows = siteFilteredRows.filter((r) => !r.premium);
+  const premiumRows = siteFilteredRows.filter((r) => r.premium);
 
   const renderRow = (row, isLast) => {
     const disabled = !!row.premium && !isSubscribed;
@@ -357,8 +412,7 @@ export default function HideJobsFilters() {
 
     const openTourForRow = () => {
       if (row.tourKey === "applied") setAppliedTourOpen(true);
-      if (row.tourKey === "companies") setCompaniesTourOpen(true); // ← NEW
-      // note: "dismissed" tour is opened from the header "?" only
+      if (row.tourKey === "companies") setCompaniesTourOpen(true);
     };
 
     return (
@@ -389,20 +443,78 @@ export default function HideJobsFilters() {
     );
   };
 
+  // If the page is not LinkedIn/Indeed/Glassdoor job pages, show only the message
+  if (visibleKeysForSite.size === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-6 text-center">
+          <Empty
+            description={
+              <span className="text-gray-600">
+                Please navigate to a job page to start using filters.
+              </span>
+            }
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+
+          <div className="mt-6">
+            <Space direction="vertical" size="large" style={{ width: "100%" }}>
+              <Button
+                type="primary"
+                size="large"
+                block
+                href="https://www.linkedin.com/jobs/search"
+                target="_blank"
+              >
+                Go to LinkedIn Jobs
+              </Button>
+              <Button
+                type="primary"
+                size="large"
+                block
+                href="https://www.indeed.com/jobs"
+                target="_blank"
+              >
+                Go to Indeed Jobs
+              </Button>
+              <Button
+                type="primary"
+                size="large"
+                block
+                href="https://glassdoor.com/Job"
+                target="_blank"
+              >
+                Go to Glassdoor Jobs
+              </Button>
+            </Space>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {/* Header with the question mark back at the title */}
+      {/* Header with the question mark back at the title (LinkedIn's "Dismissed" tour lives here) */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
-          <Tooltip title="How it works">
-            <Button
-              type="text"
-              size="small"
-              icon={<QuestionCircleFilled className="text-gray-400" />}
-              onClick={() => setDismissedTourOpen(true)}
-            />
-          </Tooltip>
+          {site === "linkedin" && (
+            <Tooltip title="How it works">
+              <Button
+                type="text"
+                size="small"
+                icon={<QuestionCircleFilled className="text-gray-400" />}
+                onClick={() => setDismissedTourOpen(true)}
+              />
+            </Tooltip>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -438,16 +550,14 @@ export default function HideJobsFilters() {
 
       {!isSubscribed && <SubscribeButton />}
 
-      {/* Overlays */}
+      {/* Overlays (only meaningful on LinkedIn, but harmless elsewhere) */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />
       <AppliedLinkedinTour open={appliedTourOpen} onClose={() => setAppliedTourOpen(false)} />
       <CompanyLinkedinTour
         open={companiesTourOpen}
         onClose={() => setCompaniesTourOpen(false)}
         onStepChange={setCompaniesTourStep}
-      />    </div>
+      />
+    </div>
   );
 }
-
-
-/////////////////
