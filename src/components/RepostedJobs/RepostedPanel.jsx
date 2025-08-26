@@ -1,6 +1,6 @@
 // src/components/RepostedJobs/RepostedPanel.jsx
 import React, { useEffect, useState, useRef } from "react";
-import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message, Switch, Skeleton, Empty, Space } from "antd";
+import { Button, Progress, Collapse, List, Tooltip, Modal, message, Switch, Skeleton, Empty, Space } from "antd";
 import {
   EyeInvisibleOutlined,
   EyeOutlined,
@@ -10,6 +10,7 @@ import {
   CloseOutlined,
   PlusSquareOutlined,
   CheckSquareOutlined,
+  QuestionCircleFilled, // ⬅️ Added
 } from "@ant-design/icons";
 
 import SubscribeButton from "../SubscribeButton"; // ⬅️ reuse the shared Subscribe button
@@ -20,8 +21,6 @@ import {
   applyOverlaysFromLocalStorage,
   toggleHideShowReposted,
   isSupportedHost,
-  loadAlertDismissed,
-  saveAlertDismissed,
   loadRepostedDetails,
   saveRepostedDetails,
   dedupeRepostedDetails,
@@ -32,6 +31,9 @@ import {
   HIDE_REPOSTED_STATE_KEY,
   FEATURE_BADGE_KEY,
 } from "./repostedDom";
+
+// ⬅️ New: Tour component import
+import RepostedJobsTour from "../Tours/RepostedJobsTour";
 
 export default function RepostedPanel() {
   const {
@@ -49,7 +51,6 @@ export default function RepostedPanel() {
     forceReset,
   } = useRepostedScanner();
 
-  const [alertDismissed, setAlertDismissed] = useState(false);
   const [details, setDetails] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [modal, modalContextHolder] = Modal.useModal();
@@ -63,6 +64,9 @@ export default function RepostedPanel() {
   const [subscriptionStatus, setSubscriptionStatus] = useState("unknown"); // internal only
   const [subscriptionLoading, setSubscriptionLoading] = useState(true); // ⬅️ show skeleton while loading sub state
   const prevIsSubscribed = useRef(false);
+
+  // ⬅️ New: Tour open/close state
+  const [repostedTourOpen, setRepostedTourOpen] = useState(false);
 
   const hostSupported = isSupportedHost();
 
@@ -137,9 +141,6 @@ export default function RepostedPanel() {
     ensureBadgeStyles();
 
     (async () => {
-      const dismissed = await loadAlertDismissed();
-      setAlertDismissed(dismissed);
-
       // Load master toggle (default ON unless explicitly false)
       chrome?.storage?.local?.get([FEATURE_BADGE_KEY], (res) => {
         const enabled = res?.[FEATURE_BADGE_KEY] !== false;
@@ -252,10 +253,6 @@ export default function RepostedPanel() {
   }, [scanning, hideReposted]);
 
   // ---------------- UI helpers ----------------
-  const onCloseAlert = async () => {
-    setAlertDismissed(true);
-    await saveAlertDismissed();
-  };
 
   const getToggleButtonText = () => {
     if (repostedCount === 0 && !firstScanDone) return hideReposted ? "Show" : "Hide";
@@ -515,6 +512,9 @@ export default function RepostedPanel() {
             </Space>
           </div>
         </div>
+
+        {/* ⬅️ Tour overlay */}
+        <RepostedJobsTour open={repostedTourOpen} onClose={() => setRepostedTourOpen(false)} />
       </div>
     );
   }
@@ -529,10 +529,19 @@ export default function RepostedPanel() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold text-hidejobs-700">Reposted jobs</h2>
+          {/* ⬅️ New: Tour trigger next to title */}
+          <Tooltip title="How it works">
+            <Button
+              type="text"
+              size="small"
+              icon={<QuestionCircleFilled />}
+              onClick={() => setRepostedTourOpen(true)}
+            />
+          </Tooltip>
         </div>
 
         {/* Wrap BOTH label + switch so the tooltip fires on either when unsubscribed */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-tour="reposted-toggle">{/* ⬅️ tour target */}
           {isSubscribed ? (
             <>
               <span className="text-sm text-gray-500">On/Off</span>
@@ -562,41 +571,6 @@ export default function RepostedPanel() {
         !isSubscribed && <SubscribeButton />
       )}
 
-      {!hostSupported ? (
-        <Alert
-          type="warning"
-          message="Open LinkedIn Jobs"
-          description="This tool works on LinkedIn job search pages. Open a LinkedIn jobs list and run the scan."
-          showIcon={false}
-          closable={!alertDismissed}
-          onClose={onCloseAlert}
-          style={{ display: alertDismissed ? "none" : "block" }}
-        />
-      ) : (
-        !alertDismissed && (
-          <Alert
-            type="info"
-            message="How it works"
-            description={
-              <div className="text-sm">
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Click <strong>Scan for Reposted Jobs</strong>.</li>
-                  <li>We open each visible card, match title/company, then detect <em>"Reposted … ago"</em>.</li>
-                  <li>Use <strong>Hide</strong>/<strong>Show</strong> to toggle reposted jobs in the list.</li>
-                  <li className="text-hidejobs-red-500">
-                    <ExclamationCircleOutlined className="mr-1" />
-                    <strong>Re-scan</strong> when you revisit the page.
-                  </li>
-                </ul>
-              </div>
-            }
-            showIcon={false}
-            closable
-            onClose={onCloseAlert}
-          />
-        )
-      )}
-
       {/* Scan + Cancel row */}
       <div className="flex w-full gap-2 min-w-0 mb-4">
         <div className="min-w-0 basis-0 grow-[2]">
@@ -607,6 +581,7 @@ export default function RepostedPanel() {
             loading={scanning}
             onClick={() => { setUiReset(false); onScan(); }}
             disabled={!isSubscribed || !featureOn || scanning || (!uiReset && firstScanDone) || !hostSupported}
+            data-tour="reposted-scan" // ⬅️ tour target
           >
             {scanning
               ? "Scanning…"
@@ -659,6 +634,9 @@ export default function RepostedPanel() {
       {hostSupported && details.length > 0 && (
         <Collapse className="bg-white" items={collapseItems} />
       )}
+
+      {/* ⬅️ Tour overlay */}
+      <RepostedJobsTour open={repostedTourOpen} onClose={() => setRepostedTourOpen(false)} />
     </div>
   );
 }
