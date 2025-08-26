@@ -1,12 +1,16 @@
-// src/components/Tours/InteractiveTour.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 
+/* ──────────────────────────────────────────────────────────
+   Utilities — similar (but NOT identical) to Applied tour
+   No view switching here; we ONLY control visibility.
+   ────────────────────────────────────────────────────────── */
+
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch { }
+  } catch {}
   return null;
 }
 
@@ -15,79 +19,27 @@ function getPanelShadowRoot() {
   return host?.shadowRoot || null;
 }
 
-/** STEP 1 target: the "Dismissed" row (label + switch) inside Filters panel */
-function findDismissedRow() {
-  const root = getPanelShadowRoot();
-  if (!root) return null;
-
-  const attrTarget = root.querySelector('[data-filter-row="dismissed"]');
-  if (attrTarget) return attrTarget;
-
-  const nodes = Array.from(root.querySelectorAll("span, div, p, h2, h3"));
-  const labelNode = nodes.find(
-    (el) => (el.textContent || "").trim().toLowerCase() === "dismissed"
-  );
-  if (!labelNode) return null;
-
-  let node = labelNode;
-  for (let i = 0; i < 6 && node; i++) {
-    if (node.querySelector && node.querySelector(".ant-switch")) return node;
-    node = node.parentElement;
-  }
-  return null;
-}
-
-/** STEP 2 target: the Dismissed badge (right stack) */
-function findDismissedBadge() {
-  const root = getPanelShadowRoot();
-  if (!root) return null;
-
-  const byAttr = root.querySelector('[data-badge="dismissed"]');
-  if (byAttr) return byAttr;
-
-  const byAria = root.querySelector('[aria-label^="Dismissed"]');
-  if (byAria) return byAria;
-
-  const candidates = Array.from(root.querySelectorAll("button, [role='button']"));
-  const byText = candidates.find((el) =>
-    ((el.textContent || "").trim().toLowerCase()).includes("dismissed")
-  );
-  if (byText) return byText;
-
-  return null;
-}
-
-/** STEP 3 target: LinkedIn job list section */
-function findJobListSection() {
-  return document.querySelector("div.scaffold-layout__list");
-}
-
-/** Tell the shell to set panel visibility explicitly (no toggle), optionally with no animation. */
+/** Show/hide your panel (no toggle), optionally with no animation. */
 function setPanelVisible(visible, { instant = false } = {}) {
   try {
     const evt = new CustomEvent("hidejobs-panel-set-visible", {
       detail: { visible, instant },
     });
     window.dispatchEvent(evt);
-  } catch { }
+  } catch {}
 }
 
-/* ──────────────────────────────────────────────
-   Extra helpers for instant open/close
-   ────────────────────────────────────────────── */
+/** Small raf helper to avoid animation race conditions */
 function raf(fn) {
   return requestAnimationFrame(fn);
 }
 
-function showPanelInstant(chromeApi, view = "filters") {
+/** Instantly show the panel WITHOUT changing view */
+function showPanelInstant(chromeApi) {
   return new Promise((resolve) => {
     chromeApi?.storage?.local?.set?.(
-      { hidejobs_panel_view: view, hidejobs_panel_visible: true, hidejobs_panel_anim: "instant" },
+      { hidejobs_panel_visible: true, hidejobs_panel_anim: "instant" },
       () => {
-        try {
-          const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view } });
-          window.dispatchEvent(evt);
-        } catch { }
         raf(() => {
           setPanelVisible(true, { instant: true });
           raf(() => {
@@ -100,6 +52,7 @@ function showPanelInstant(chromeApi, view = "filters") {
   });
 }
 
+/** Instantly hide the panel WITHOUT changing view */
 function hidePanelInstant(chromeApi) {
   return new Promise((resolve) => {
     chromeApi?.storage?.local?.set?.(
@@ -117,77 +70,71 @@ function hidePanelInstant(chromeApi) {
   });
 }
 
-export default function InteractiveTour({ open, onClose }) {
+/* ──────────────────────────────────────────────────────────
+   Step target finders
+   ────────────────────────────────────────────────────────── */
+
+/** STEP 1 target: LinkedIn job description pane (outside our panel) */
+function findLinkedInDescription() {
+  return document.querySelector("div.scaffold-layout__detail") || null;
+}
+
+/** STEP 2 target: Title & Company block inside the panel content */
+function findTitleCompanyBlock() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  const attrTarget = root.querySelector('[data-tour="addtracker-title"]');
+  if (attrTarget) return attrTarget;
+  const possible = Array.from(root.querySelectorAll("p"));
+  const title = possible.find((el) => el.className?.toString().includes("text-2xl"));
+  return title ? title.parentElement : null;
+}
+
+/** STEP 3 target: Categories table */
+function findCategoriesTable() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  const table = root.querySelector('[data-tour="addtracker-categories"]');
+  if (table) return table;
+  return root.querySelector("table"); // fallback
+}
+
+/** STEP 4 target: Status field block */
+function findStatusBlock() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  const attrTarget = root.querySelector('[data-tour="addtracker-status"]');
+  if (attrTarget) return attrTarget;
+  const labels = Array.from(root.querySelectorAll("label"));
+  const statusLbl = labels.find((el) => (el.textContent || "").trim().toLowerCase() === "status");
+  return statusLbl ? statusLbl.parentElement : null;
+}
+
+export default function AddToTrackerTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
   const [step, setStep] = useState(1);
   const rafRef = useRef();
   const boxRef = useRef(null);
 
-  // Reset to step 1 whenever the tour opens
   useEffect(() => {
     if (open) setStep(1);
   }, [open]);
 
-  // Always show the panel on Filters when the tour starts (instantly, no animation)
   useEffect(() => {
     if (!open || !chromeApi) return;
-
-    showPanelInstant(chromeApi, "filters");
+    hidePanelInstant(chromeApi);
   }, [open, chromeApi]);
 
-  // ✅ STEP 1: reset only the Dismissed toggle and compact once per entry into step 1
-  useEffect(() => {
-    if (!open || !chromeApi) return;
-    if (step !== 1) return;
-
-    const toSet = {
-      badgesCompact: false,
-      dismissedHidden: false,
-      dismissedBadgeVisible: false,
-    };
-
-    chromeApi.storage.local.set(toSet, () => {
-      try {
-        const detail = { dismissed: false, badgesCompact: false };
-        window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
-      } catch { }
-    });
-  }, [open, step, chromeApi]);
-
-  // If user turns Dismissed ON during Step 1 → go to Step 2 & close panel instantly
-  useEffect(() => {
-    if (!open || !chromeApi) return;
-
-    const onChange = (changes, area) => {
-      if (area !== "local") return;
-
-      if (step === 1 && ("dismissedHidden" in changes || "dismissedBadgeVisible" in changes)) {
-        const hv = "dismissedHidden" in changes ? !!changes.dismissedHidden.newValue : null;
-        const bv =
-          "dismissedBadgeVisible" in changes ? !!changes.dismissedBadgeVisible.newValue : null;
-        const nowOn = hv === true || bv === true;
-        if (nowOn) {
-          setStep(2);
-          hidePanelInstant(chromeApi);
-        }
-      }
-    };
-
-    chromeApi.storage.onChanged.addListener(onChange);
-    return () => chromeApi.storage.onChanged.removeListener(onChange);
-  }, [open, step, chromeApi]);
-
-  // Measure the current step target
+  // Measure current step target
   useEffect(() => {
     if (!open) return;
-
     const measure = () => {
       let el = null;
-      if (step === 1) el = findDismissedRow();
-      else if (step === 2) el = findDismissedBadge();
-      else if (step === 3) el = findJobListSection();
-
+      if (step === 1) el = findLinkedInDescription();
+      else if (step === 2) el = findTitleCompanyBlock();
+      else if (step === 3) el = findCategoriesTable();
+      else if (step === 4) el = findStatusBlock();
       if (!el) {
         setRect(null);
         return;
@@ -195,23 +142,17 @@ export default function InteractiveTour({ open, onClose }) {
       const r = el.getBoundingClientRect();
       setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
     };
-
     measure();
-
     const onScrollResize = () => {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(measure);
     };
-
     window.addEventListener("scroll", onScrollResize, true);
     window.addEventListener("resize", onScrollResize);
-
     const root = getPanelShadowRoot() || document.body;
     const mo = new MutationObserver(measure);
     mo.observe(root, { childList: true, subtree: true });
-
     const id = setInterval(measure, 600);
-
     return () => {
       clearInterval(id);
       mo.disconnect();
@@ -221,12 +162,10 @@ export default function InteractiveTour({ open, onClose }) {
     };
   }, [open, step]);
 
-  // Block interactions outside the hole; allow instruction box; ESC closes
+  // Block interactions
   useEffect(() => {
     if (!open) return;
-
     const PADDING = 8;
-
     const isInsideHole = (ev) => {
       if (!rect) return false;
       const { clientX: x, clientY: y } = ev;
@@ -237,7 +176,6 @@ export default function InteractiveTour({ open, onClose }) {
         y <= rect.y + rect.h + PADDING
       );
     };
-
     const isInsideBox = (ev) => {
       const el = boxRef.current;
       if (!el) return false;
@@ -247,13 +185,11 @@ export default function InteractiveTour({ open, onClose }) {
       }
       return el.contains(ev.target);
     };
-
     const guard = (ev) => {
       if (isInsideHole(ev) || isInsideBox(ev)) return;
       ev.preventDefault();
       ev.stopPropagation();
     };
-
     const onPointer = (ev) => guard(ev);
     const onWheel = (ev) => guard(ev);
     const onKey = (ev) => {
@@ -269,9 +205,7 @@ export default function InteractiveTour({ open, onClose }) {
         ev.stopPropagation();
       }
     };
-
     const onEsc = (e) => e.key === "Escape" && onClose?.();
-
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("pointerup", onPointer, true);
     window.addEventListener("click", onPointer, true);
@@ -280,7 +214,6 @@ export default function InteractiveTour({ open, onClose }) {
     window.addEventListener("wheel", onWheel, { capture: true, passive: false });
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("keydown", onEsc);
-
     return () => {
       window.removeEventListener("pointerdown", onPointer, true);
       window.removeEventListener("pointerup", onPointer, true);
@@ -293,31 +226,23 @@ export default function InteractiveTour({ open, onClose }) {
     };
   }, [open, rect, onClose]);
 
-  // Buttons
   const handlePrev = () => {
     if (step === 2) {
-      // Back to Step 1: reopen panel instantly; Step-1 effect will reset dismissed + compact
-      showPanelInstant(chromeApi, "filters").then(() => setStep(1));
+      hidePanelInstant(chromeApi).then(() => setStep(1));
     } else if (step === 3) {
       setStep(2);
+    } else if (step === 4) {
+      setStep(3);
     }
   };
 
   const handleNext = () => {
     if (step === 1) {
-      chromeApi?.storage?.local?.set(
-        {
-          dismissedHidden: true,
-          dismissedBadgeVisible: true,
-          hidejobs_panel_visible: false,
-        },
-        () => {
-          setStep(2);
-          hidePanelInstant(chromeApi);
-        }
-      );
+      showPanelInstant(chromeApi).then(() => setStep(2));
     } else if (step === 2) {
       setStep(3);
+    } else if (step === 3) {
+      setStep(4);
     }
   };
 
@@ -328,13 +253,18 @@ export default function InteractiveTour({ open, onClose }) {
   const boxW = 328;
   const estBoxH = 170;
 
-  // Positioning for instruction box
+  // Positioning
   let boxTop, boxLeft;
-  if (step === 3) {
-    // Prefer RIGHT of the highlighted area
-    const preferRight = hole.x + hole.w + gap;
-    const fitsRight = preferRight + boxW + 12 <= window.innerWidth;
-    boxLeft = fitsRight ? preferRight : Math.max(12, hole.x - gap - boxW);
+  if (step === 1) {
+    const preferLeft = hole.x - gap - boxW;
+    const fitsLeft = preferLeft >= 12;
+    boxLeft = fitsLeft ? preferLeft : Math.min(window.innerWidth - boxW - 12, hole.x + hole.w + gap);
+    boxTop = Math.max(12, Math.min(window.innerHeight - estBoxH - 12, hole.y));
+  } else if (step === 4) {
+    // Force box to the LEFT for Status step
+    const preferLeft = hole.x - gap - boxW;
+    const fitsLeft = preferLeft >= 12;
+    boxLeft = fitsLeft ? preferLeft : 12;
     boxTop = Math.max(12, Math.min(window.innerHeight - estBoxH - 12, hole.y));
   } else {
     const placeBelow =
@@ -343,26 +273,26 @@ export default function InteractiveTour({ open, onClose }) {
     boxLeft = Math.max(12, Math.min(window.innerWidth - boxW - 12, hole.x));
   }
 
-  const stepTitle = step === 1 ? "Step 1" : step === 2 ? "Step 2" : "Step 3";
+  const stepTitle =
+    step === 1 ? "Step 1" : step === 2 ? "Step 2" : step === 3 ? "Step 3" : "Step 4";
   const stepText =
     step === 1
-      ? "Turn ON any filter to activate it. Try the Dismissed filter now or click Next."
+      ? "This is the job description on LinkedIn. Review it before saving to your tracker."
       : step === 2
-        ? "Turning a filter ON hides jobs immediately. A badge appears here as a quick control — showing how many are hidden. Click it anytime to pause or resume hiding without removing the badge."
-        : "Job cards matching your filter will disappear from this list, so you can focus on opportunities that matter.";
+      ? "Here you see the job title and company — the context for the job you’re adding."
+      : step === 3
+      ? "These are the categories of information HideJobs captured from the job post."
+      : "Pick a Status to track where you are in the process. You can change it anytime.";
 
   return (
     <div
       style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }}
       aria-hidden
     >
-      {/* Hide ant tooltips/popovers during the tour */}
       <style>{`.ant-tooltip,.ant-popover{display:none !important;}`}</style>
-
-      {/* Mask with transparent hole */}
       <svg width="100%" height="100%" style={{ position: "fixed", inset: 0, display: "block" }}>
         <defs>
-          <mask id="hj-tour-mask">
+          <mask id="hj-addtracker-mask">
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
             <rect
               x={hole.x - 8}
@@ -381,11 +311,9 @@ export default function InteractiveTour({ open, onClose }) {
           width="100%"
           height="100%"
           fill="rgba(0,0,0,0.45)"
-          mask="url(#hj-tour-mask)"
+          mask="url(#hj-addtracker-mask)"
         />
       </svg>
-
-      {/* Instruction box */}
       <div
         ref={boxRef}
         style={{
@@ -406,12 +334,10 @@ export default function InteractiveTour({ open, onClose }) {
           <div className="text-sm font-semibold text-gray-800">{stepTitle}</div>
           <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
         </div>
-
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
-
         <div className="mt-3 flex items-center justify-end gap-2">
           {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
-          {step < 3 ? (
+          {step < 4 ? (
             <Button type="primary" onClick={handleNext}>
               Next
             </Button>

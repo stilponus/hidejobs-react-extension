@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Select, Rate, Input, Button, Skeleton } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
+import { Select, Rate, Input, Button, Skeleton, Tooltip } from "antd";
+import { CheckCircleOutlined, CloseCircleOutlined, QuestionCircleFilled } from "@ant-design/icons";
+import AddToTrackerTour from "./Tours/AddToTrackerTour";
 
 const { Option } = Select;
 
@@ -24,6 +25,8 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
   const [status, setStatus] = useState("bookmarked");
   const [rating, setRating] = useState(0);
   const [notes, setNotes] = useState("");
+
+  const [openTour, setOpenTour] = useState(false);
 
   const jobStatuses = [
     { key: "bookmarked", label: "Bookmarked" },
@@ -91,13 +94,28 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
       <Skeleton active />
     ) : (
       <>
+        {/* Header row with Help ("How it works") button */}
+        <div className="w-full flex items-start justify-end mb-2">
+          <Tooltip title="How it works">
+            <Button
+              type="text"
+              size="small"
+              icon={<QuestionCircleFilled className="text-gray-400" />}
+              onClick={() => setOpenTour(true)}
+              aria-label="How it works"
+            />
+          </Tooltip>
+        </div>
+
         {/* Title and company */}
-        {data.job_title && (
-          <p className="text-2xl font-semibold text-hidejobs-700 mb-0">{data.job_title}</p>
-        )}
-        {data.company_name && (
-          <p className="text-base text-gray-600 mb-3">{data.company_name}</p>
-        )}
+        <div data-tour="addtracker-title" className="mb-3">
+          {data.job_title && (
+            <p className="text-2xl font-semibold text-hidejobs-700 mb-0">{data.job_title}</p>
+          )}
+          {data.company_name && (
+            <p className="text-base text-gray-600 mb-0">{data.company_name}</p>
+          )}
+        </div>
 
         {/* Categories table */}
         <table className="w-full mb-4 text-sm">
@@ -133,7 +151,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
         ) : (
           <>
             {/* Status */}
-            <div className="mb-3">
+            <div className="mb-3" data-tour="addtracker-status">
               <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Status</label>
               <Select value={status} style={{ width: "100%" }} onChange={setStatus} className="text-sm">
                 {jobStatuses.map((s) => (
@@ -164,6 +182,9 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
             </div>
           </>
         )}
+
+        {/* Tour instance */}
+        <AddToTrackerTour open={openTour} onClose={() => setOpenTour(false)} />
       </>
     ),
     status,
