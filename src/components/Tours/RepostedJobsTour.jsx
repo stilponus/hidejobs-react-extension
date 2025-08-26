@@ -41,6 +41,14 @@ function findJobListSection() {
   return document.querySelector("div.scaffold-layout__list");
 }
 
+/** STEP 4 target: Hide/Show button in the Reposted panel */
+function findHideShowButton() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  const btns = Array.from(root.querySelectorAll("button"));
+  return btns.find((b) => /^(hide|show)\b/i.test((b.textContent || "").trim()));
+}
+
 /** Panel visibility helpers */
 function setPanelVisible(visible, { instant = false } = {}) {
   try {
@@ -97,14 +105,19 @@ export default function RepostedJobsTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
   const [step, setStep] = useState(1);
+  const [scanning, setScanning] = useState(false);
   const rafRef = useRef();
   const boxRef = useRef(null);
   const switchObserverRef = useRef(null);
   const pollTimerRef = useRef(null);
+  const progObserverRef = useRef(null);
 
   // Reset to step 1 whenever tour opens
   useEffect(() => {
-    if (open) setStep(1);
+    if (open) {
+      setStep(1);
+      setScanning(false);
+    }
   }, [open]);
 
   // Always open panel on Reposted when tour starts
@@ -117,7 +130,6 @@ export default function RepostedJobsTour({ open, onClose }) {
   useEffect(() => {
     if (!open || step !== 1) return;
 
-    // Reset OFF
     const resetOff = () => {
       const sw = findRepostedSwitchEl();
       if (!sw) return;
@@ -127,7 +139,6 @@ export default function RepostedJobsTour({ open, onClose }) {
     resetOff();
     const t = setTimeout(resetOff, 100);
 
-    // Watch ON → advance to Step 2
     const sw = findRepostedSwitchEl();
     if (sw) {
       const mo = new MutationObserver(() => {
@@ -163,16 +174,95 @@ export default function RepostedJobsTour({ open, onClose }) {
     };
   }, [open, step]);
 
-  // Step 2 logic: advance to Step 3 if Scan is clicked
+  // Step 2 logic: clicking Scan advances to Step 3 (scanning state)
   useEffect(() => {
     if (!open || step !== 2) return;
     const btn = findRepostedScanButton();
     if (!btn) return;
+
     const handler = () => {
+      setScanning(true);
       hidePanelInstant(chromeApi).then(() => setStep(3));
     };
+
     btn.addEventListener("click", handler);
     return () => btn.removeEventListener("click", handler);
+  }, [open, step, chromeApi]);
+
+  // Step 3 logic: wait for REAL scan completion (Progress aria-valuenow reaches 100), then go Step 4
+  useEffect(() => {
+    if (!open || step !== 3) return;
+
+    const root = getPanelShadowRoot();
+    if (!root) return;
+
+    // Even though panel is hidden, DOM remains; watch the progressbar value
+    const findProgress = () =>
+      root.querySelector('[role="progressbar"]') ||
+      root.querySelector('.ant-progress [role="progressbar"]');
+
+    let prog = findProgress();
+
+    // If not immediately available, poll briefly until it appears, then observe changes
+    let appearedPoll = null;
+    const startObserving = () => {
+      prog = findProgress();
+      if (!prog) return;
+
+      const checkNow = () => {
+        const now = parseFloat(prog.getAttribute("aria-valuenow") || "0");
+        if (!isNaN(now) && now >= 100) {
+          // Completed
+          cleanupObserver();
+          setScanning(false);
+          setStep(4);
+          showPanelInstant(chromeApi, "reposted");
+          return true;
+        }
+        return false;
+      };
+
+      if (checkNow()) return;
+
+      const mo = new MutationObserver(() => {
+        checkNow();
+      });
+      mo.observe(prog, { attributes: true, attributeFilter: ["aria-valuenow", "class", "style"] });
+      progObserverRef.current = mo;
+    };
+
+    if (!prog) {
+      appearedPoll = setInterval(() => {
+        const p = findProgress();
+        if (p) {
+          clearInterval(appearedPoll);
+          appearedPoll = null;
+          startObserving();
+        }
+      }, 250);
+    } else {
+      startObserving();
+    }
+
+    const cleanupObserver = () => {
+      if (progObserverRef.current) {
+        progObserverRef.current.disconnect();
+        progObserverRef.current = null;
+      }
+      if (appearedPoll) {
+        clearInterval(appearedPoll);
+      }
+    };
+
+    return () => {
+      if (progObserverRef.current) {
+        progObserverRef.current.disconnect();
+        progObserverRef.current = null;
+      }
+      if (appearedPoll) {
+        clearInterval(appearedPoll);
+      }
+    };
   }, [open, step, chromeApi]);
 
   // Measure target rect
@@ -183,6 +273,7 @@ export default function RepostedJobsTour({ open, onClose }) {
       if (step === 1) el = findRepostedToggle();
       else if (step === 2) el = findRepostedScanButton();
       else if (step === 3) el = findJobListSection();
+      else if (step === 4) el = findHideShowButton();
       if (!el) return setRect(null);
       const r = el.getBoundingClientRect();
       setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
@@ -210,7 +301,7 @@ export default function RepostedJobsTour({ open, onClose }) {
   // Buttons
   const handlePrev = () => {
     if (step === 2) setStep(1);
-    else if (step === 3) showPanelInstant(chromeApi, "reposted").then(() => setStep(2));
+    else if (step === 4) setStep(3);
   };
 
   const handleNext = () => {
@@ -223,9 +314,10 @@ export default function RepostedJobsTour({ open, onClose }) {
       setStep(2);
     } else if (step === 2) {
       const btn = findRepostedScanButton();
-      if (btn) btn.click(); // simulate click
+      if (btn) btn.click(); // start scan
+      setScanning(true);
       hidePanelInstant(chromeApi).then(() => setStep(3));
-    } else if (step === 3) {
+    } else if (step === 4) {
       onClose?.();
     }
   };
@@ -238,16 +330,11 @@ export default function RepostedJobsTour({ open, onClose }) {
   const estBoxH = 160;
 
   let boxTop, boxLeft;
-  if (step === 1) {
+  if (step === 1 || step === 2 || step === 4) {
     const preferRight = hole.x + hole.w + gap;
     const fitsRight = preferRight + boxW + 12 <= window.innerWidth;
     boxLeft = fitsRight ? preferRight : Math.max(12, hole.x - gap - boxW);
     boxTop = Math.max(12, Math.min(window.innerHeight - estBoxH - 12, hole.y));
-  } else if (step === 2) {
-    const placeBelow =
-      hole.y + hole.h + gap + estBoxH <= window.innerHeight || hole.y < estBoxH + gap;
-    boxTop = placeBelow ? hole.y + hole.h + gap : Math.max(12, hole.y - estBoxH - gap);
-    boxLeft = Math.max(12, Math.min(window.innerWidth - boxW - 12, hole.x));
   } else if (step === 3) {
     const preferRight = hole.x + hole.w + gap;
     const fitsRight = preferRight + boxW + 12 <= window.innerWidth;
@@ -255,14 +342,19 @@ export default function RepostedJobsTour({ open, onClose }) {
     boxTop = Math.max(12, Math.min(window.innerHeight - estBoxH - 12, hole.y));
   }
 
-  const stepTitle = step === 1 ? "Step 1" : step === 2 ? "Step 2" : "Step 3";
+  const stepTitle =
+    step === 1 ? "Step 1" : step === 2 ? "Step 2" : step === 3 ? "Step 3" : "Step 4";
+
   const stepText =
     step === 1
       ? "Turn ON the Reposted Jobs detector using this switch. Or click Next and I’ll turn it on for you."
       : step === 2
         ? "Click Scan for Reposted Jobs. Or click Next and I’ll scan for you automatically."
-        : "Here’s your LinkedIn jobs list. Reposted items can be hidden for a cleaner view.";
-  const stepCount = 3;
+        : step === 3
+          ? "Scanning in progress… When it finishes, we’ll continue."
+          : "Back to the panel. Use this Hide/Show button to toggle reposted jobs in the list.";
+
+  const stepCount = 4;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }}>
@@ -311,15 +403,24 @@ export default function RepostedJobsTour({ open, onClose }) {
           <div className="text-sm font-semibold text-gray-800">{stepTitle}</div>
           <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
         </div>
+
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
+
         <div className="mt-3 flex items-end justify-between gap-2">
           <div className="text-sm text-gray-600 leading-none">
             {step} / {stepCount}
           </div>
           <div className="flex items-end gap-2">
-            {(step === 2 || step === 3) && <Button onClick={handlePrev}>Previous</Button>}
+            {/* Hide Previous in Step 3 while scanning per request */}
+            {step === 2 && <Button onClick={handlePrev}>Previous</Button>}
+            {step === 4 && <Button onClick={handlePrev}>Previous</Button>}
+
             {step === 3 ? (
-              <Button type="primary" onClick={onClose}>
+              <Button type="primary" loading>
+                Scanning for Reposted jobs...
+              </Button>
+            ) : step === 4 ? (
+              <Button type="primary" onClick={handleNext}>
                 Finish
               </Button>
             ) : (
