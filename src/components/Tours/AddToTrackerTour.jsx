@@ -133,6 +133,40 @@ function findSaveButtonBlock() {
   return match || null;
 }
 
+/** Helper to detect the "Open saved job" button once saved */
+function findOpenSavedJobButton() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  const candidates = Array.from(root.querySelectorAll("button,[role='button']"));
+  return (
+    candidates.find(
+      (el) => (el.textContent || "").trim().toLowerCase() === "open saved job"
+    ) || null
+  );
+}
+
+/** STEP 8 target: area that includes title, categories and the "Open saved job" button */
+function findSavedSummaryArea() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+
+  const title = root.querySelector('[data-tour="addtracker-title"]');
+  const cats = root.querySelector('[data-tour="addtracker-categories"]');
+  const openBtn = findOpenSavedJobButton();
+
+  if (title && cats && openBtn) {
+    // Walk up from title to find a common ancestor that contains cats and openBtn
+    let node = title;
+    while (node && node !== root) {
+      if (node.contains(cats) && node.contains(openBtn)) return node;
+      node = node.parentElement;
+    }
+    // Fallback to a reasonable container
+    return root;
+  }
+  return null;
+}
+
 export default function AddToTrackerTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
@@ -193,6 +227,59 @@ export default function AddToTrackerTour({ open, onClose }) {
     };
   }, [open, step]);
 
+  // Step 7: After clicking Save, wait until it's saved (Saved state or "Open saved job" button), then go to step 8
+  useEffect(() => {
+    if (!open || step !== 7) return;
+
+    let pollId = null;
+    let mo = null;
+
+    const checkSaved = () => {
+      const openBtn = findOpenSavedJobButton();
+      const saveBtn = findSaveButtonBlock();
+      const isSaved =
+        !!openBtn ||
+        (saveBtn &&
+          ((saveBtn.textContent || "").trim().toLowerCase() === "saved" ||
+            saveBtn.hasAttribute("disabled")));
+      if (isSaved) {
+        if (pollId) {
+          clearInterval(pollId);
+          pollId = null;
+        }
+        if (mo) {
+          mo.disconnect();
+          mo = null;
+        }
+        setTimeout(() => setStep(8), 150);
+      }
+    };
+
+    const onClick = (e) => {
+      const saveEl = findSaveButtonBlock();
+      if (saveEl && (e.target === saveEl || saveEl.contains(e.target))) {
+        // Start watching for saved state
+        if (!pollId) pollId = setInterval(checkSaved, 200);
+        if (!mo) {
+          const root = getPanelShadowRoot() || document.body;
+          mo = new MutationObserver(checkSaved);
+          mo.observe(root, { childList: true, subtree: true, characterData: true });
+        }
+      }
+    };
+
+    document.addEventListener("click", onClick, true);
+    const rootEl = getPanelShadowRoot();
+    if (rootEl) rootEl.addEventListener("click", onClick, true);
+
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      if (rootEl) rootEl.removeEventListener("click", onClick, true);
+      if (pollId) clearInterval(pollId);
+      if (mo) mo.disconnect();
+    };
+  }, [open, step]);
+
   // Measure current step target
   useEffect(() => {
     if (!open) return;
@@ -205,6 +292,7 @@ export default function AddToTrackerTour({ open, onClose }) {
       else if (step === 5) el = findInterestBlock();
       else if (step === 6) el = findNotesBlock();
       else if (step === 7) el = findSaveButtonBlock();
+      else if (step === 8) el = findSavedSummaryArea();
 
       if (!el) {
         setRect(null);
@@ -315,7 +403,7 @@ export default function AddToTrackerTour({ open, onClose }) {
   const handleNext = () => {
     if (step === 1) {
       showPanelInstant(chromeApi).then(() => setStep(2));
-    } else if (step < 7) {
+    } else if (step < 8) {
       setStep(step + 1);
     }
   };
@@ -330,7 +418,7 @@ export default function AddToTrackerTour({ open, onClose }) {
   // Positioning
   let boxTop, boxLeft;
   if (step === 1 || step >= 4) {
-    // Force box to the LEFT for steps 1,4,5,6,7
+    // Force box to the LEFT for steps 1,4,5,6,7,8
     const preferLeft = hole.x - gap - boxW;
     const fitsLeft = preferLeft >= 12;
     boxLeft = fitsLeft ? preferLeft : 12;
@@ -356,7 +444,9 @@ export default function AddToTrackerTour({ open, onClose }) {
               ? "Rate your interest in this job. Clicking stars or Next will advance."
               : step === 6
                 ? "Add your notes about this job for future reference."
-                : "Finally, click Save to add this job to your tracker.";
+                : step === 7
+                  ? "Finally, click Save to add this job to your tracker. We'll move on once it's saved."
+                  : "Great! Your job is saved. Here's where to find the title, captured details, and the Open saved job button.";
 
   return (
     <div
@@ -411,7 +501,7 @@ export default function AddToTrackerTour({ open, onClose }) {
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
         <div className="mt-3 flex items-center justify-end gap-2">
           {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
-          {step < 7 ? (
+          {step < 8 ? (
             <Button type="primary" onClick={handleNext}>
               Next
             </Button>
