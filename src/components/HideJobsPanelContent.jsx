@@ -163,13 +163,13 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
             </div>
 
             {/* Interest */}
-            <div className="mb-3">
+            <div className="mb-3"data-tour="addtracker-interest">
               <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Interest</label>
               <Rate value={rating} onChange={setRating} />
             </div>
 
             {/* Notes */}
-            <div>
+            <div data-tour="addtracker-notes">
               <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Notes</label>
               <Input.TextArea
                 rows={4}

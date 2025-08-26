@@ -10,7 +10,7 @@ import { CloseOutlined } from "@ant-design/icons";
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -26,7 +26,7 @@ function setPanelVisible(visible, { instant = false } = {}) {
       detail: { visible, instant },
     });
     window.dispatchEvent(evt);
-  } catch {}
+  } catch { }
 }
 
 /** Small raf helper to avoid animation race conditions */
@@ -74,12 +74,10 @@ function hidePanelInstant(chromeApi) {
    Step target finders
    ────────────────────────────────────────────────────────── */
 
-/** STEP 1 target: LinkedIn job description pane (outside our panel) */
 function findLinkedInDescription() {
   return document.querySelector("div.scaffold-layout__detail") || null;
 }
 
-/** STEP 2 target: Title & Company block inside the panel content */
 function findTitleCompanyBlock() {
   const root = getPanelShadowRoot();
   if (!root) return null;
@@ -90,7 +88,6 @@ function findTitleCompanyBlock() {
   return title ? title.parentElement : null;
 }
 
-/** STEP 3 target: Categories table */
 function findCategoriesTable() {
   const root = getPanelShadowRoot();
   if (!root) return null;
@@ -99,7 +96,6 @@ function findCategoriesTable() {
   return root.querySelector("table"); // fallback
 }
 
-/** STEP 4 target: Status field block */
 function findStatusBlock() {
   const root = getPanelShadowRoot();
   if (!root) return null;
@@ -108,6 +104,18 @@ function findStatusBlock() {
   const labels = Array.from(root.querySelectorAll("label"));
   const statusLbl = labels.find((el) => (el.textContent || "").trim().toLowerCase() === "status");
   return statusLbl ? statusLbl.parentElement : null;
+}
+
+function findInterestBlock() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  return root.querySelector('[data-tour="addtracker-interest"]');
+}
+
+function findNotesBlock() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  return root.querySelector('[data-tour="addtracker-notes"]');
 }
 
 export default function AddToTrackerTour({ open, onClose }) {
@@ -126,6 +134,41 @@ export default function AddToTrackerTour({ open, onClose }) {
     hidePanelInstant(chromeApi);
   }, [open, chromeApi]);
 
+  // Auto-advance on Status (step 4) and Interest (step 5)
+  useEffect(() => {
+    if (!open) return;
+
+    const handler = (e) => {
+      const t = e.target;
+      
+      // Step 4: Auto-advance when user selects ANY dropdown option
+      if (step === 4) {
+        // Check if clicked on any dropdown item/option
+        if (t.closest('.ant-select-item') || 
+            t.closest('.ant-select-item-option') ||
+            (t.className && typeof t.className === 'string' && t.className.includes('ant-select-item'))) {
+          setTimeout(() => setStep(5), 200); // Small delay to let selection complete
+          return;
+        }
+      }
+      
+      // Step 5: Auto-advance when user clicks on any star rating
+      if (step === 5) {
+        // Check if clicked within the interest block (stars)
+        if (t.closest('[data-tour="addtracker-interest"]') || 
+            t.closest('.ant-rate') ||
+            t.closest('.ant-rate-star') ||
+            (t.className && typeof t.className === 'string' && t.className.includes('ant-rate'))) {
+          setTimeout(() => setStep(6), 200); // Small delay to let rating complete
+          return;
+        }
+      }
+    };
+
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [open, step]);
+
   // Measure current step target
   useEffect(() => {
     if (!open) return;
@@ -135,6 +178,8 @@ export default function AddToTrackerTour({ open, onClose }) {
       else if (step === 2) el = findTitleCompanyBlock();
       else if (step === 3) el = findCategoriesTable();
       else if (step === 4) el = findStatusBlock();
+      else if (step === 5) el = findInterestBlock();
+      else if (step === 6) el = findNotesBlock();
       if (!el) {
         setRect(null);
         return;
@@ -165,7 +210,12 @@ export default function AddToTrackerTour({ open, onClose }) {
   // Block interactions
   useEffect(() => {
     if (!open) return;
+    
+    // ✅ STEP 4: NO BLOCKING AT ALL - let user interact with dropdown freely
+    if (step === 4) return;
+    
     const PADDING = 8;
+    
     const isInsideHole = (ev) => {
       if (!rect) return false;
       const { clientX: x, clientY: y } = ev;
@@ -176,6 +226,7 @@ export default function AddToTrackerTour({ open, onClose }) {
         y <= rect.y + rect.h + PADDING
       );
     };
+    
     const isInsideBox = (ev) => {
       const el = boxRef.current;
       if (!el) return false;
@@ -185,11 +236,18 @@ export default function AddToTrackerTour({ open, onClose }) {
       }
       return el.contains(ev.target);
     };
+    
     const guard = (ev) => {
+      // ✅ General dropdown allowance for other steps
+      if (ev.target.closest(".ant-select-dropdown")) return;
+      
+      // Standard hole and box checks
       if (isInsideHole(ev) || isInsideBox(ev)) return;
+      
       ev.preventDefault();
       ev.stopPropagation();
     };
+    
     const onPointer = (ev) => guard(ev);
     const onWheel = (ev) => guard(ev);
     const onKey = (ev) => {
@@ -206,6 +264,7 @@ export default function AddToTrackerTour({ open, onClose }) {
       }
     };
     const onEsc = (e) => e.key === "Escape" && onClose?.();
+    
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("pointerup", onPointer, true);
     window.addEventListener("click", onPointer, true);
@@ -214,6 +273,7 @@ export default function AddToTrackerTour({ open, onClose }) {
     window.addEventListener("wheel", onWheel, { capture: true, passive: false });
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("keydown", onEsc);
+    
     return () => {
       window.removeEventListener("pointerdown", onPointer, true);
       window.removeEventListener("pointerup", onPointer, true);
@@ -224,25 +284,21 @@ export default function AddToTrackerTour({ open, onClose }) {
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("keydown", onEsc);
     };
-  }, [open, rect, onClose]);
+  }, [open, rect, onClose, step]);
 
   const handlePrev = () => {
     if (step === 2) {
       hidePanelInstant(chromeApi).then(() => setStep(1));
-    } else if (step === 3) {
-      setStep(2);
-    } else if (step === 4) {
-      setStep(3);
+    } else if (step > 2) {
+      setStep(step - 1);
     }
   };
 
   const handleNext = () => {
     if (step === 1) {
       showPanelInstant(chromeApi).then(() => setStep(2));
-    } else if (step === 2) {
-      setStep(3);
-    } else if (step === 3) {
-      setStep(4);
+    } else if (step < 6) {
+      setStep(step + 1);
     }
   };
 
@@ -255,13 +311,8 @@ export default function AddToTrackerTour({ open, onClose }) {
 
   // Positioning
   let boxTop, boxLeft;
-  if (step === 1) {
-    const preferLeft = hole.x - gap - boxW;
-    const fitsLeft = preferLeft >= 12;
-    boxLeft = fitsLeft ? preferLeft : Math.min(window.innerWidth - boxW - 12, hole.x + hole.w + gap);
-    boxTop = Math.max(12, Math.min(window.innerHeight - estBoxH - 12, hole.y));
-  } else if (step === 4) {
-    // Force box to the LEFT for Status step
+  if (step === 1 || step >= 4) {
+    // Force box to the LEFT for steps 1,4,5,6
     const preferLeft = hole.x - gap - boxW;
     const fitsLeft = preferLeft >= 12;
     boxLeft = fitsLeft ? preferLeft : 12;
@@ -273,16 +324,19 @@ export default function AddToTrackerTour({ open, onClose }) {
     boxLeft = Math.max(12, Math.min(window.innerWidth - boxW - 12, hole.x));
   }
 
-  const stepTitle =
-    step === 1 ? "Step 1" : step === 2 ? "Step 2" : step === 3 ? "Step 3" : "Step 4";
+  const stepTitle = `Step ${step}`;
   const stepText =
     step === 1
       ? "This is the job description on LinkedIn. Review it before saving to your tracker."
       : step === 2
-      ? "Here you see the job title and company — the context for the job you’re adding."
-      : step === 3
-      ? "These are the categories of information HideJobs captured from the job post."
-      : "Pick a Status to track where you are in the process. You can change it anytime.";
+        ? "Here you see the job title and company — the context for the job you're adding."
+        : step === 3
+          ? "These are the categories of information HideJobs captured from the job post."
+          : step === 4
+            ? "Pick a Status to track where you are in the process. Choosing one moves you ahead."
+            : step === 5
+              ? "Rate your interest in this job. Clicking stars or Next will advance."
+              : "Add your notes about this job for future reference.";
 
   return (
     <div
@@ -337,7 +391,7 @@ export default function AddToTrackerTour({ open, onClose }) {
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
         <div className="mt-3 flex items-center justify-end gap-2">
           {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
-          {step < 4 ? (
+          {step < 6 ? (
             <Button type="primary" onClick={handleNext}>
               Next
             </Button>
