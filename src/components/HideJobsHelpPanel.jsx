@@ -1,3 +1,4 @@
+// src/components/HideJobsHelpPanel.jsx
 import React, { useState, useEffect } from "react";
 import { Button, Form, Input, message as antdMessage } from "antd";
 
@@ -79,6 +80,9 @@ export default function HideJobsHelpPanel() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-hidejobs-700">Help & Support</h2>
+      <p className="text-gray-600 text-sm">
+        We’re always here to help and usually respond quickly.
+      </p>
 
       <Form
         form={form}
@@ -87,7 +91,6 @@ export default function HideJobsHelpPanel() {
         onValuesChange={handleValuesChange}
       >
         <Form.Item
-          label="Your Name"
           name="name"
           rules={[{ required: true, message: "Please enter your name" }]}
         >
@@ -95,7 +98,6 @@ export default function HideJobsHelpPanel() {
         </Form.Item>
 
         <Form.Item
-          label="Your Email"
           name="email"
           rules={[
             { required: true, message: "Please enter your email" },
@@ -106,13 +108,12 @@ export default function HideJobsHelpPanel() {
         </Form.Item>
 
         <Form.Item
-          label="Message"
           name="message"
           rules={[{ required: true, message: "Please enter your message" }]}
         >
           <Input.TextArea
             rows={4}
-            style={{ resize: "none" }} // 🚫 disable manual resize
+            style={{ resize: "none" }}
             placeholder="Write your message here..."
           />
         </Form.Item>
