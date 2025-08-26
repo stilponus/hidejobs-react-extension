@@ -43,10 +43,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
       if (!msg || typeof msg !== "object") return;
 
       if (msg.type === "hidejobs-job-loading") {
-        // INSTANT: clear current data so UI shows <Skeleton />
         setData(null);
-
-        // reset per-job UI state for the next job
         setIsJobSaved(false);
         setStatus("bookmarked");
         setRating(0);
@@ -65,7 +62,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
     return () => window.removeEventListener("message", handleMessage);
   }, [setIsJobSaved, setTrackedJobId]);
 
-  // Check if this job is already saved (runs when the externalJobId changes)
+  // Check if this job is already saved
   useEffect(() => {
     setIsJobSaved(false);
     setStatus("bookmarked");
@@ -94,20 +91,23 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
       <Skeleton active />
     ) : (
       <>
-        {/* Header row with Help ("How it works") button */}
-        {!isJobSaved && (
-          <div className="w-full flex items-start justify-end mb-2">
-            <Tooltip title="How it works">
-              <Button
-                type="text"
-                size="small"
-                icon={<QuestionCircleFilled className="text-gray-400" />}
-                onClick={() => setOpenTour(true)}
-                aria-label="How it works"
-              />
-            </Tooltip>
-          </div>
-        )}
+        {/* Header with title + help button */}
+        <div className="w-full flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-hidejobs-700 flex items-center gap-1">
+            Add to Tracker
+            {!isJobSaved && (
+              <Tooltip title="How it works">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<QuestionCircleFilled className="text-gray-400" />}
+                  onClick={() => setOpenTour(true)}
+                  aria-label="How it works"
+                />
+              </Tooltip>
+            )}
+          </h2>
+        </div>
 
         {/* Title and company */}
         <div data-tour="addtracker-title" className="mb-3">
@@ -145,7 +145,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
 
         {/* Saved / actions */}
         {isJobSaved ? (
-          <div className="flex justify-center">
+          <div className="flex justify-center" data-tour="addtracker-open-saved-job">
             <Button onClick={handleOpenJob} type="primary" size="large">
               Open saved job
             </Button>

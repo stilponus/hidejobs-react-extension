@@ -151,7 +151,7 @@ function findSavedSummaryArea() {
 
   const title = root.querySelector('[data-tour="addtracker-title"]');
   const cats = root.querySelector('[data-tour="addtracker-categories"]');
-  const openBtn = findOpenSavedJobButton();
+  const openBtn = root.querySelector('[data-tour="addtracker-open-saved-job"]');
 
   if (title && cats && openBtn) {
     let node = title;
@@ -168,6 +168,7 @@ export default function AddToTrackerTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
   const [step, setStep] = useState(1);
+  const [savingStep7, setSavingStep7] = useState(false);
   const rafRef = useRef();
   const boxRef = useRef(null);
 
@@ -245,6 +246,7 @@ export default function AddToTrackerTour({ open, onClose }) {
           mo.disconnect();
           mo = null;
         }
+        setSavingStep7(false);
         setTimeout(() => setStep(8), 150);
       }
     };
@@ -252,6 +254,7 @@ export default function AddToTrackerTour({ open, onClose }) {
     const onClick = (e) => {
       const saveEl = findSaveButtonBlock();
       if (saveEl && (e.target === saveEl || saveEl.contains(e.target))) {
+        setSavingStep7(true);
         if (!pollId) pollId = setInterval(checkSaved, 200);
         if (!mo) {
           const root = getPanelShadowRoot() || document.body;
@@ -261,9 +264,9 @@ export default function AddToTrackerTour({ open, onClose }) {
       }
     };
 
-    // ✅ New: also listen for tour-triggered save
+    // also listen for tour-triggered save
     const onTourSave = () => {
-      console.log("🟠 Tour-triggered save → start watching for saved state");
+      setSavingStep7(true);
       if (!pollId) pollId = setInterval(checkSaved, 200);
       if (!mo) {
         const root = getPanelShadowRoot() || document.body;
@@ -411,6 +414,7 @@ export default function AddToTrackerTour({ open, onClose }) {
       setStep(step + 1);
     } else if (step === 7) {
       console.log("🟠 Tour NEXT pressed on step 7 → triggering save");
+      setSavingStep7(true);
       window.dispatchEvent(new Event("hidejobs-tour-trigger-save"));
     }
   };
@@ -502,9 +506,13 @@ export default function AddToTrackerTour({ open, onClose }) {
         </div>
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
         <div className="mt-3 flex items-center justify-end gap-2">
-          {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
+          {(step > 1 && step !== 8) && <Button onClick={handlePrev}>Previous</Button>}
           {step < 8 ? (
-            <Button type="primary" onClick={handleNext}>
+            <Button
+              type="primary"
+              onClick={handleNext}
+              disabled={step === 7 && savingStep7}
+            >
               Next
             </Button>
           ) : (
