@@ -101,22 +101,25 @@ function hidePanelInstant(chromeApi) {
   });
 }
 
-export default function RepostedJobsTour({ open, onClose }) {
+export default function RepostedJobsTour({
+  open,
+  onClose,
+  scanning: parentScanning,
+  scanCompleted,
+  onAbort
+}) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
   const [step, setStep] = useState(1);
-  const [scanning, setScanning] = useState(false);
   const rafRef = useRef();
   const boxRef = useRef(null);
   const switchObserverRef = useRef(null);
   const pollTimerRef = useRef(null);
-  const progObserverRef = useRef(null);
 
   // Reset to step 1 whenever tour opens
   useEffect(() => {
     if (open) {
       setStep(1);
-      setScanning(false);
     }
   }, [open]);
 
@@ -181,7 +184,6 @@ export default function RepostedJobsTour({ open, onClose }) {
     if (!btn) return;
 
     const handler = () => {
-      setScanning(true);
       hidePanelInstant(chromeApi).then(() => setStep(3));
     };
 
@@ -189,81 +191,8 @@ export default function RepostedJobsTour({ open, onClose }) {
     return () => btn.removeEventListener("click", handler);
   }, [open, step, chromeApi]);
 
-  // Step 3 logic: wait for REAL scan completion (Progress aria-valuenow reaches 100), then go Step 4
-  useEffect(() => {
-    if (!open || step !== 3) return;
-
-    const root = getPanelShadowRoot();
-    if (!root) return;
-
-    // Even though panel is hidden, DOM remains; watch the progressbar value
-    const findProgress = () =>
-      root.querySelector('[role="progressbar"]') ||
-      root.querySelector('.ant-progress [role="progressbar"]');
-
-    let prog = findProgress();
-
-    // If not immediately available, poll briefly until it appears, then observe changes
-    let appearedPoll = null;
-    const startObserving = () => {
-      prog = findProgress();
-      if (!prog) return;
-
-      const checkNow = () => {
-        const now = parseFloat(prog.getAttribute("aria-valuenow") || "0");
-        if (!isNaN(now) && now >= 100) {
-          // Completed
-          cleanupObserver();
-          setScanning(false);
-          setStep(4);
-          showPanelInstant(chromeApi, "reposted");
-          return true;
-        }
-        return false;
-      };
-
-      if (checkNow()) return;
-
-      const mo = new MutationObserver(() => {
-        checkNow();
-      });
-      mo.observe(prog, { attributes: true, attributeFilter: ["aria-valuenow", "class", "style"] });
-      progObserverRef.current = mo;
-    };
-
-    if (!prog) {
-      appearedPoll = setInterval(() => {
-        const p = findProgress();
-        if (p) {
-          clearInterval(appearedPoll);
-          appearedPoll = null;
-          startObserving();
-        }
-      }, 250);
-    } else {
-      startObserving();
-    }
-
-    const cleanupObserver = () => {
-      if (progObserverRef.current) {
-        progObserverRef.current.disconnect();
-        progObserverRef.current = null;
-      }
-      if (appearedPoll) {
-        clearInterval(appearedPoll);
-      }
-    };
-
-    return () => {
-      if (progObserverRef.current) {
-        progObserverRef.current.disconnect();
-        progObserverRef.current = null;
-      }
-      if (appearedPoll) {
-        clearInterval(appearedPoll);
-      }
-    };
-  }, [open, step, chromeApi]);
+  // Step 3 logic: No automatic advancement - user must click Next when scan completes
+  // Note: We don't automatically advance - user must click Next when scan completes
 
   // Measure target rect
   useEffect(() => {
@@ -298,6 +227,14 @@ export default function RepostedJobsTour({ open, onClose }) {
     };
   }, [open, step]);
 
+  // Handle close with scan abort when in step 3
+  const handleClose = () => {
+    if (step === 3 && parentScanning && onAbort) {
+      onAbort(); // Abort the scan if we're in step 3 and scanning
+    }
+    onClose?.();
+  };
+
   // Buttons
   const handlePrev = () => {
     if (step === 2) setStep(1);
@@ -315,8 +252,11 @@ export default function RepostedJobsTour({ open, onClose }) {
     } else if (step === 2) {
       const btn = findRepostedScanButton();
       if (btn) btn.click(); // start scan
-      setScanning(true);
       hidePanelInstant(chromeApi).then(() => setStep(3));
+    } else if (step === 3) {
+      // When scan is complete and user clicks Next, go to step 4
+      setStep(4);
+      showPanelInstant(chromeApi, "reposted");
     } else if (step === 4) {
       onClose?.();
     }
@@ -347,11 +287,13 @@ export default function RepostedJobsTour({ open, onClose }) {
 
   const stepText =
     step === 1
-      ? "Turn ON the Reposted Jobs detector using this switch. Or click Next and I’ll turn it on for you."
+      ? "Turn ON the Reposted Jobs detector using this switch. Or click Next and I'll turn it on for you."
       : step === 2
-        ? "Click Scan for Reposted Jobs. Or click Next and I’ll scan for you automatically."
+        ? "Click Scan for Reposted Jobs. Or click Next and I'll scan for you automatically."
         : step === 3
-          ? "Scanning in progress… When it finishes, we’ll continue."
+          ? parentScanning
+            ? "Scanning in progress… When it finishes, we'll continue."
+            : "Scanning complete! Click Next to continue to the final step."
           : "Back to the panel. Use this Hide/Show button to toggle reposted jobs in the list.";
 
   const stepCount = 4;
@@ -401,7 +343,7 @@ export default function RepostedJobsTour({ open, onClose }) {
       >
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold text-gray-800">{stepTitle}</div>
-          <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
+          <Button type="text" size="small" icon={<CloseOutlined />} onClick={handleClose} />
         </div>
 
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
@@ -416,9 +358,15 @@ export default function RepostedJobsTour({ open, onClose }) {
             {step === 4 && <Button onClick={handlePrev}>Previous</Button>}
 
             {step === 3 ? (
-              <Button type="primary" loading>
-                Scanning for Reposted jobs...
-              </Button>
+              parentScanning ? (
+                <Button type="primary" loading>
+                  Scanning for Reposted jobs...
+                </Button>
+              ) : (
+                <Button type="primary" onClick={handleNext}>
+                  Next
+                </Button>
+              )
             ) : step === 4 ? (
               <Button type="primary" onClick={handleNext}>
                 Finish

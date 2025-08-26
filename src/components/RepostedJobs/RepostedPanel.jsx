@@ -511,9 +511,6 @@ export default function RepostedPanel() {
             </Space>
           </div>
         </div>
-
-        {/* ⬅️ Tour overlay */}
-        <RepostedJobsTour open={repostedTourOpen} onClose={() => setRepostedTourOpen(false)} />
       </div>
     );
   }
@@ -634,8 +631,13 @@ export default function RepostedPanel() {
         <Collapse className="bg-white" items={collapseItems} />
       )}
 
-      {/* ⬅️ Tour overlay */}
-      <RepostedJobsTour open={repostedTourOpen} onClose={() => setRepostedTourOpen(false)} />
+      <RepostedJobsTour
+        open={repostedTourOpen}
+        onClose={() => setRepostedTourOpen(false)}
+        scanning={scanning}
+        scanCompleted={firstScanDone}
+        onAbort={onAbort}  // ← Add this new prop
+      />
     </div>
   );
 }
