@@ -505,21 +505,24 @@ export default function AddToTrackerTour({ open, onClose }) {
           <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
         </div>
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
-        <div className="mt-3 flex items-center justify-end gap-2">
-          {(step > 1 && step !== 8) && <Button onClick={handlePrev}>Previous</Button>}
-          {step < 8 ? (
-            <Button
-              type="primary"
-              onClick={handleNext}
-              disabled={step === 7 && savingStep7}
-            >
-              Next
-            </Button>
-          ) : (
-            <Button type="primary" onClick={onClose}>
-              Finish
-            </Button>
-          )}
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <div aria-live="polite" className="text-sm text-gray-600 leading-none">{step} / 8</div>
+          <div className="flex items-end gap-2">
+            {(step > 1 && step !== 8) && <Button onClick={handlePrev}>Previous</Button>}
+            {step < 8 ? (
+              <Button
+                type="primary"
+                onClick={handleNext}
+                disabled={step === 7 && savingStep7}
+              >
+                Next
+              </Button>
+            ) : (
+              <Button type="primary" onClick={onClose}>
+                Finish
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

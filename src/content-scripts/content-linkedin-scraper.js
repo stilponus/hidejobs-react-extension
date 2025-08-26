@@ -2,7 +2,6 @@
   // ===== Toggle debug logs here =====
   const DEBUG = true;
   const log = (...args) => DEBUG && console.log("[LIScraper]", ...args);
-  const warn = (...args) => DEBUG && console.warn("[LIScraper][WARN]", ...args);
   const error = (...args) => DEBUG && console.error("[LIScraper][ERROR]", ...args);
 
   // === Config ===
@@ -22,9 +21,8 @@
 
   // === Utils ===
   const getEl = (selector) => document.querySelector(selector);
-  const getText = (selector, labelForDebug) => {
+  const getText = (selector) => {
     const el = getEl(selector);
-    if (!el && DEBUG) warn(`Selector not found: ${labelForDebug || selector}`);
     return el ? el.innerText.trim() : null;
   };
   const normalizeSpace = (s) => (typeof s === "string" ? s.replace(/\s+/g, " ").trim() : s);
@@ -72,23 +70,22 @@
 
   const getJobTitle = () => {
     const title =
-      getText(".job-details-jobs-unified-top-card__job-title h1", "title.h1") ||
-      getText("h1.t-24", "h1.t-24") ||
-      getText('h1[data-test-job-title]', 'h1[data-test-job-title]');
+      getText(".job-details-jobs-unified-top-card__job-title h1") ||
+      getText("h1.t-24") ||
+      getText('h1[data-test-job-title]');
     return normalizeSpace(title);
   };
 
   const getCompanyName = () => {
     const name =
-      getText(".job-details-jobs-unified-top-card__company-name a", "company link") ||
-      getText(".job-details-jobs-unified-top-card__company-name", "company name");
+      getText(".job-details-jobs-unified-top-card__company-name a") ||
+      getText(".job-details-jobs-unified-top-card__company-name");
     return normalizeSpace(name);
   };
 
   const getLocation = () => {
     const root = getTopCard();
     if (!root) {
-      warn("Top card container not found; cannot derive location.");
       return null;
     }
     const span = root.querySelector(".tvm__text.tvm__text--low-emphasis");
@@ -147,7 +144,6 @@
 
   const getJobDescriptionHTML = () => {
     const el = getEl("#job-details");
-    if (!el) warn("#job-details not found (job description)");
     return el ? el.innerHTML : null;
   };
 
@@ -231,7 +227,6 @@
     const missing = [];
     if (!p.job_title) missing.push("job_title");
     if (!p.company_name) missing.push("company_name");
-    if (missing.length && DEBUG) warn("Missing critical fields:", missing);
     return missing.length > 0;
   };
 
@@ -256,7 +251,6 @@
         log(`Retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAY}ms…`);
         STATE.retryTimeout = setTimeout(() => extractWithRetry(attempt + 1, runId), RETRY_DELAY);
       } else {
-        if (hasMissingCriticalData(payload)) warn("Giving up after retries; sending whatever we have.");
         sendPayload(payload);
       }
     } catch (e) {
@@ -319,17 +313,15 @@
       const _replaceState = history.replaceState;
 
       history.pushState = function (state, title, url) {
-        // compute absolute next URL (if provided)
         let nextHref = window.location.href;
         if (url != null) {
           try {
             nextHref = new URL(url, window.location.href).href;
-          } catch (_) {}
+          } catch (_) { }
         }
         triggerRescrapeNow("history.pushState(pre)", nextHref);
 
         const ret = _pushState.apply(this, arguments);
-        // also call once more after, in case site mutates URL further
         triggerRescrapeNow("history.pushState(post)");
         return ret;
       };
@@ -339,7 +331,7 @@
         if (url != null) {
           try {
             nextHref = new URL(url, window.location.href).href;
-          } catch (_) {}
+          } catch (_) { }
         }
         triggerRescrapeNow("history.replaceState(pre)", nextHref);
 
@@ -350,7 +342,7 @@
 
       log("Patched history.pushState/replaceState (pre + post).");
     } catch (e) {
-      warn("Failed to patch history API:", e);
+      error("Failed to patch history API:", e);
     }
 
     // 2) popstate / hashchange — send loading immediately on event
@@ -378,10 +370,7 @@
   // === Initial boot ===
   const boot = () => {
     setupUrlChangeDetection();
-
-    // On first load, show Skeleton immediately, then scrape
     sendLoading();
-
     STATE.lastUrl = window.location.href;
     STATE.runId += 1;
     startWhenReady(STATE.runId);

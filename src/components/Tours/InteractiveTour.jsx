@@ -409,17 +409,20 @@ export default function InteractiveTour({ open, onClose }) {
 
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
 
-        <div className="mt-3 flex items-center justify-end gap-2">
-          {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
-          {step < 3 ? (
-            <Button type="primary" onClick={handleNext}>
-              Next
-            </Button>
-          ) : (
-            <Button type="primary" onClick={onClose}>
-              Finish
-            </Button>
-          )}
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <div aria-live="polite" className="text-sm text-gray-600 leading-none">{step} / 3</div>
+          <div className="flex items-end gap-2">
+            {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
+            {step < 3 ? (
+              <Button type="primary" onClick={handleNext}>
+                Next
+              </Button>
+            ) : (
+              <Button type="primary" onClick={onClose}>
+                Finish
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
