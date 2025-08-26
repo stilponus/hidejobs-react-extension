@@ -1,6 +1,6 @@
 // src/components/Tours/RepostedJobsTour.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "antd";
+import { Button, Progress } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 
 function getChrome() {
@@ -101,12 +101,13 @@ function hidePanelInstant(chromeApi) {
   });
 }
 
-export default function RepostedJobsTour({
-  open,
-  onClose,
-  scanning: parentScanning,
+export default function RepostedJobsTour({ 
+  open, 
+  onClose, 
+  scanning: parentScanning, 
   scanCompleted,
-  onAbort
+  onAbort,
+  progress = 0 
 }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
@@ -227,6 +228,82 @@ export default function RepostedJobsTour({
     };
   }, [open, step]);
 
+  // Block interactions outside the hole; allow instruction box; ESC closes
+  useEffect(() => {
+    if (!open) return;
+
+    const PADDING = 8;
+
+    const isInsideHole = (ev) => {
+      if (!rect) return false;
+      const { clientX: x, clientY: y } = ev;
+      return (
+        x >= rect.x - PADDING &&
+        x <= rect.x + rect.w + PADDING &&
+        y >= rect.y - PADDING &&
+        y <= rect.y + rect.h + PADDING
+      );
+    };
+
+    const isInsideBox = (ev) => {
+      const el = boxRef.current;
+      if (!el) return false;
+      if (typeof ev.composedPath === "function") {
+        const path = ev.composedPath();
+        if (path && path.includes(el)) return true;
+      }
+      return el.contains(ev.target);
+    };
+
+    const guard = (ev) => {
+      // Only block events that have a user-triggered isTrusted flag
+      // This allows programmatic clicks (sw.click(), btn.click()) to work
+      if (!ev.isTrusted) return;
+      
+      if (isInsideHole(ev) || isInsideBox(ev)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+
+    const onPointer = (ev) => guard(ev);
+    const onWheel = (ev) => guard(ev);
+    const onKey = (ev) => {
+      if (ev.key === "Escape") return;
+      const el = boxRef.current;
+      if (el && el.contains(document.activeElement)) return;
+      if (
+        ["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " ", "Spacebar"].includes(
+          ev.key
+        )
+      ) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    };
+
+    const onEsc = (e) => e.key === "Escape" && handleClose();
+
+    window.addEventListener("pointerdown", onPointer, true);
+    window.addEventListener("pointerup", onPointer, true);
+    window.addEventListener("click", onPointer, true);
+    window.addEventListener("dblclick", onPointer, true);
+    window.addEventListener("contextmenu", onPointer, true);
+    window.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keydown", onEsc);
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointer, true);
+      window.removeEventListener("pointerup", onPointer, true);
+      window.removeEventListener("click", onPointer, true);
+      window.removeEventListener("dblclick", onPointer, true);
+      window.removeEventListener("contextmenu", onPointer, true);
+      window.removeEventListener("wheel", onWheel, true);
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keydown", onEsc);
+    };
+  }, [open, rect]);
+
   // Handle close with scan abort when in step 3
   const handleClose = () => {
     if (step === 3 && parentScanning && onAbort) {
@@ -291,7 +368,7 @@ export default function RepostedJobsTour({
       : step === 2
         ? "Click Scan for Reposted Jobs. Or click Next and I'll scan for you automatically."
         : step === 3
-          ? parentScanning
+          ? parentScanning 
             ? "Scanning in progress… When it finishes, we'll continue."
             : "Scanning complete! Click Next to continue to the final step."
           : "Back to the panel. Use this Hide/Show button to toggle reposted jobs in the list.";
@@ -299,7 +376,10 @@ export default function RepostedJobsTour({
   const stepCount = 4;
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }}>
+    <div 
+      style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }}
+      aria-hidden
+    >
       <style>{`.ant-tooltip,.ant-popover{display:none !important;}`}</style>
       <svg width="100%" height="100%" style={{ position: "fixed", inset: 0, display: "block" }}>
         <defs>
@@ -347,6 +427,13 @@ export default function RepostedJobsTour({
         </div>
 
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
+
+        {/* Progress bar for step 3 while scanning */}
+        {step === 3 && parentScanning && (
+          <div className="mt-3">
+            <Progress percent={Math.round(progress)} size="small" />
+          </div>
+        )}
 
         <div className="mt-3 flex items-end justify-between gap-2">
           <div className="text-sm text-gray-600 leading-none">

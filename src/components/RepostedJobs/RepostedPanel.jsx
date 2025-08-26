@@ -470,7 +470,11 @@ export default function RepostedPanel() {
       });
       toggleHideShowReposted(false);
       removeBadgesAndUnhideNow();
-      messageApi.info("Reposted Jobs detection disabled.");
+
+      // 👇 only show message if tour is not open
+      if (!repostedTourOpen) {
+        messageApi.info("Reposted Jobs detection disabled.");
+      }
     } else {
       chrome?.storage?.local?.set({ [FEATURE_BADGE_KEY]: true });
       applyOverlaysFromLocalStorage();
@@ -478,7 +482,11 @@ export default function RepostedPanel() {
         const hideNow = res?.[HIDE_REPOSTED_STATE_KEY] === "true";
         toggleHideShowReposted(hideNow);
       });
-      messageApi.success("Reposted Jobs detection enabled.");
+
+      // 👇 only show message if tour is not open
+      if (!repostedTourOpen) {
+        messageApi.success("Reposted Jobs detection enabled.");
+      }
     }
   };
 
@@ -626,9 +634,20 @@ export default function RepostedPanel() {
         </div>
       )}
 
-      {/* Collapsible list only when we actually have items */}
-      {hostSupported && details.length > 0 && (
-        <Collapse className="bg-white" items={collapseItems} />
+      {/* Collapsible list OR empty state */}
+      {hostSupported && (
+        details.length > 0 ? (
+          <Collapse className="bg-white" items={collapseItems} />
+        ) : (
+          firstScanDone && !scanning && (
+            <div className="rounded-lg border border-gray-200 p-6 text-center">
+              <Empty
+                description={<span className="text-gray-600">No reposted jobs were detected during the last scan.</span>}
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            </div>
+          )
+        )
       )}
 
       <RepostedJobsTour
@@ -636,7 +655,8 @@ export default function RepostedPanel() {
         onClose={() => setRepostedTourOpen(false)}
         scanning={scanning}
         scanCompleted={firstScanDone}
-        onAbort={onAbort}  // ← Add this new prop
+        onAbort={onAbort}
+        progress={progress}  // ← Add this new prop
       />
     </div>
   );
