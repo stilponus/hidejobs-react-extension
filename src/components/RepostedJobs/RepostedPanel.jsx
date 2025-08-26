@@ -5,7 +5,6 @@ import {
   EyeInvisibleOutlined,
   EyeOutlined,
   StopOutlined,
-  ExclamationCircleOutlined,
   DeleteOutlined,
   CloseOutlined,
   PlusSquareOutlined,
