@@ -336,7 +336,7 @@ export default function CompaniesHideList() {
         {modalContextHolder}
 
         {/* Title row (keep consistent with normal view) */}
-        <div className="flex items-center justify-between -mt-1">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {showBackToFilters && (
               <Tooltip title="Back to Filters">
@@ -348,7 +348,7 @@ export default function CompaniesHideList() {
                 />
               </Tooltip>
             )}
-            <h2 className="text-lg font-semibold text-hidejobs-700">
+            <h2 className="text-lg font-semibold text-hidejobs-700 mb-0">
               Hidden Companies
             </h2>
           </div>
@@ -406,7 +406,7 @@ export default function CompaniesHideList() {
       {modalContextHolder}
 
       {/* Title row */}
-      <div className="flex items-center justify-between -mt-1">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {showBackToFilters && (
             <Tooltip title="Back to Filters">

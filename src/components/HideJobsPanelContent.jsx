@@ -90,23 +90,21 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
     content: !data ? (
       <Skeleton active />
     ) : (
-      <>
+      <div className="space-y-4">
         {/* Header with title + help button */}
-        <div className="w-full flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-hidejobs-700 flex items-center gap-1">
-            Add to Tracker
-            {!isJobSaved && (
-              <Tooltip title="How it works">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<QuestionCircleFilled className="text-gray-400" />}
-                  onClick={() => setOpenTour(true)}
-                  aria-label="How it works"
-                />
-              </Tooltip>
-            )}
-          </h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-lg font-semibold text-hidejobs-700 mb-0">Add to Tracker</h2>
+          {!isJobSaved && (
+            <Tooltip title="How it works">
+              <Button
+                type="text"
+                size="small"
+                icon={<QuestionCircleFilled className="text-gray-400" />}
+                onClick={() => setOpenTour(true)}
+                aria-label="How it works"
+              />
+            </Tooltip>
+          )}
         </div>
 
         {/* Title and company */}
@@ -201,7 +199,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
 
         {/* Tour instance */}
         <AddToTrackerTour open={openTour} onClose={() => setOpenTour(false)} />
-      </>
+      </div>
     ),
     status,
     rating,
