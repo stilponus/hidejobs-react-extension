@@ -42,28 +42,10 @@
     },
     {
       "matches": [
-        "https://*.hh.ru/vacancy/*"
-      ],
-      "js": [
-        "content-hh.ru-scraper.js"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
         "https://*.linkedin.com/jobs/*"
       ],
       "js": [
         "content-linkedin-scraper.js"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://*.zarplata.ru/vacancy/*"
-      ],
-      "js": [
-        "content-zarplata.ru-scraper.js"
       ],
       "run_at": "document_idle"
     },

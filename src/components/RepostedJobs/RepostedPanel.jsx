@@ -1,6 +1,6 @@
 // src/components/RepostedJobs/RepostedPanel.jsx
 import React, { useEffect, useState, useRef } from "react";
-import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message, Switch, Skeleton } from "antd";
+import { Button, Progress, Alert, Collapse, List, Tooltip, Modal, message, Switch, Skeleton, Empty, Space } from "antd";
 import {
   EyeInvisibleOutlined,
   EyeOutlined,
@@ -65,6 +65,9 @@ export default function RepostedPanel() {
   const prevIsSubscribed = useRef(false);
 
   const hostSupported = isSupportedHost();
+
+  // Check if we're on a LinkedIn jobs page
+  const isLinkedInJobsPage = /\/\/(www\.)?linkedin\.com\/jobs\/(view|collections|search)\//i.test(window.location.href);
 
   // ---------------- Helpers ----------------
   function removeBadgesAndUnhideNow() {
@@ -456,9 +459,13 @@ export default function RepostedPanel() {
     },
   ];
 
-
-  // ---------------- Feature toggle handler ----------------
+  // ---------------- Feature toggle handler (updated with abort functionality) ----------------
   const onFeatureToggle = (checked) => {
+    // If turning off while scanning, abort the scan first
+    if (!checked && scanning) {
+      onAbort();
+    }
+
     setFeatureOn(checked);
     if (!checked) {
       chrome?.storage?.local?.set({
@@ -479,7 +486,40 @@ export default function RepostedPanel() {
     }
   };
 
-  // ---------------- Render ----------------
+  // ---------------- Render empty state for non-LinkedIn pages ----------------
+  if (!isLinkedInJobsPage) {
+    return (
+      <div className="space-y-4">
+        {modalContextHolder}
+        {messageContextHolder}
+
+        {/* Header row: title left, master feature toggle right */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-hidejobs-700">Reposted jobs</h2>
+          </div>
+        </div>
+
+        {/* Empty state for non-LinkedIn pages */}
+        <div className="rounded-lg border border-gray-200 p-6 text-center">
+          <Empty
+            description={<span className="text-gray-600">Please navigate to LinkedIn jobs page to start detecting reposted jobs.</span>}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+
+          <div className="mt-6">
+            <Space direction="vertical" size="large" style={{ width: "100%" }}>
+              <Button type="primary" size="large" block href="https://www.linkedin.com/jobs/search" target="_blank">
+                Go to LinkedIn Jobs
+              </Button>
+            </Space>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------- Render main panel content for LinkedIn pages ----------------
   return (
     <div className="space-y-4">
       {modalContextHolder}
