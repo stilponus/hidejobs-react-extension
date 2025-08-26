@@ -49,6 +49,16 @@ function findHideShowButton() {
   return btns.find((b) => /^(hide|show)\b/i.test((b.textContent || "").trim()));
 }
 
+/** STEP 4b target: Empty state section when no jobs found */
+function findEmptyStateSection() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  // Look for the empty state container
+  return root.querySelector('.ant-empty') ||
+    root.querySelector('[class*="empty"]') ||
+    root.querySelector('div[class*="rounded-lg border border-gray-200"]');
+}
+
 /** Panel visibility helpers */
 function setPanelVisible(visible, { instant = false } = {}) {
   try {
@@ -101,13 +111,14 @@ function hidePanelInstant(chromeApi) {
   });
 }
 
-export default function RepostedJobsTour({ 
-  open, 
-  onClose, 
-  scanning: parentScanning, 
+export default function RepostedJobsTour({
+  open,
+  onClose,
+  scanning: parentScanning,
   scanCompleted,
   onAbort,
-  progress = 0 
+  progress = 0,
+  foundThisScan = 0
 }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
@@ -203,7 +214,10 @@ export default function RepostedJobsTour({
       if (step === 1) el = findRepostedToggle();
       else if (step === 2) el = findRepostedScanButton();
       else if (step === 3) el = findJobListSection();
-      else if (step === 4) el = findHideShowButton();
+      else if (step === 4) {
+        // Step 4a: Hide/Show button if jobs found, Step 4b: empty state if no jobs
+        el = foundThisScan > 0 ? findHideShowButton() : findEmptyStateSection();
+      }
       if (!el) return setRect(null);
       const r = el.getBoundingClientRect();
       setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
@@ -226,7 +240,7 @@ export default function RepostedJobsTour({
       window.removeEventListener("resize", onScrollResize);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [open, step]);
+  }, [open, step, foundThisScan]);
 
   // Block interactions outside the hole; allow instruction box; ESC closes
   useEffect(() => {
@@ -259,7 +273,7 @@ export default function RepostedJobsTour({
       // Only block events that have a user-triggered isTrusted flag
       // This allows programmatic clicks (sw.click(), btn.click()) to work
       if (!ev.isTrusted) return;
-      
+
       if (isInsideHole(ev) || isInsideBox(ev)) return;
       ev.preventDefault();
       ev.stopPropagation();
@@ -364,19 +378,23 @@ export default function RepostedJobsTour({
 
   const stepText =
     step === 1
-      ? "Turn ON the Reposted Jobs detector using this switch. Or click Next and I'll turn it on for you."
+      ? "In order to activate the Reposted Jobs feature, turn on this toggle to start detecting and hiding reposted job postings, or click Next and we'll enable it for you."
       : step === 2
-        ? "Click Scan for Reposted Jobs. Or click Next and I'll scan for you automatically."
+        ? "Now we need to scan for reposted jobs since LinkedIn doesn't provide this information by default. Click the Scan button or click Next to start scanning automatically."
         : step === 3
-          ? parentScanning 
-            ? "Scanning in progress… When it finishes, we'll continue."
-            : "Scanning complete! Click Next to continue to the final step."
-          : "Back to the panel. Use this Hide/Show button to toggle reposted jobs in the list.";
+          ? parentScanning
+            ? "We're now scanning the job listings for reposts. This process typically takes 25-30 seconds and won't take long. Please wait for the scan to complete to continue the tour, or click the X button to abort and exit."
+            : "Scan complete! Each reposted job is now marked with a Reposted badge on the job card in this list and ready to be hidden. Click Next to continue to the final step."
+          : step === 4
+            ? foundThisScan > 0
+              ? "After scanning and detecting reposted jobs, use this Hide button to remove them from your job search results."
+              : "No reposted jobs were detected during this tour, so there's nothing to hide at the moment. When reposts are found, you'll see a Hide button here to filter them out."
+            : "";
 
   const stepCount = 4;
 
   return (
-    <div 
+    <div
       style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }}
       aria-hidden
     >

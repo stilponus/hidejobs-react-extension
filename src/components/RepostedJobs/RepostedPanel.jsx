@@ -531,15 +531,19 @@ export default function RepostedPanel() {
 
       {/* Header row: title left, master feature toggle right */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <h2 className="text-lg font-semibold text-hidejobs-700">Reposted jobs</h2>
           {/* ⬅️ New: Tour trigger next to title */}
           <Tooltip title="How it works">
             <Button
               type="text"
               size="small"
-              icon={<QuestionCircleFilled />}
-              onClick={() => setRepostedTourOpen(true)}
+              icon={<QuestionCircleFilled className="text-gray-400" />}
+              onClick={() => {
+                forceReset();
+                setUiReset(true);
+                setRepostedTourOpen(true);
+              }}
             />
           </Tooltip>
         </div>
@@ -657,6 +661,7 @@ export default function RepostedPanel() {
         scanCompleted={firstScanDone}
         onAbort={onAbort}
         progress={progress}  // ← Add this new prop
+        foundThisScan={foundThisScan}  // ← Add this new prop
       />
     </div>
   );
