@@ -519,29 +519,26 @@ export default function HideJobsFilters() {
 
   // All possible rows (filtered per site below) — does NOT include totalOnPage now
   const rows = [
+    // 🔹 LinkedIn filters
     { key: "dismissed", label: "Dismissed" },
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
-
-    { key: "applied", label: "Applied (LinkedIn)", premium: true, tourKey: "applied" },
-
-    // Companies rows (ALL premium, shared tour UX)
-    { key: "companies", label: "Companies (LinkedIn)", premium: true, tourKey: "companies" },
-    { key: "indeedCompanies", label: "Companies (Indeed)", premium: true },
-    { key: "glassdoorCompanies", label: "Companies (Glassdoor)", premium: true },
-
+    { key: "applied", label: "Applied", premium: true, tourKey: "applied" },
+    { key: "companies", label: "Companies", premium: true, tourKey: "companies" },
     { key: "userText", label: "Keywords", premium: true },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
     { key: "repostedGhost", label: "Reposted Jobs", premium: true },
 
-    { key: "indeedSponsored", label: "Sponsored (Indeed)", premium: true },
-    { key: "indeedApplied", label: "Applied (Indeed)", premium: true },
+    // 🔹 Indeed filters
+    { key: "indeedCompanies", label: "Companies", premium: true },
+    { key: "indeedApplied", label: "Applied", premium: true },
+    { key: "indeedSponsored", label: "Sponsored", premium: true },
+    { key: "indeedUserText", label: "Keywords", premium: true },
 
-    // Keywords mirrors
-    { key: "indeedUserText", label: "Keywords (Indeed)", premium: true },
-    { key: "glassdoorUserText", label: "Keywords (Glassdoor)", premium: true },
-
-    { key: "glassdoorApplied", label: "Applied (Glassdoor)", premium: true },
+    // 🔹 Glassdoor filters
+    { key: "glassdoorCompanies", label: "Companies", premium: true },
+    { key: "glassdoorApplied", label: "Applied", premium: true },
+    { key: "glassdoorUserText", label: "Keywords", premium: true },
   ];
 
   const siteFilteredRows = rows.filter((r) => visibleKeysForSite.has(r.key));

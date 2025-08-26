@@ -69,15 +69,14 @@ export default function BadgesHost() {
     ];
   } else if (isIndeed) {
     badges = [
+      { key: "indeedCompanies", label: "Companies", color: "companies" },
       { key: "indeedApplied", label: "Applied", color: "applied" },
       { key: "indeedSponsored", label: "Sponsored", color: "promoted" },
-      { key: "indeedCompanies", label: "Companies", color: "companies" },
     ];
   } else if (isGlassdoor) {
-    // ✅ Glassdoor: Applied + Companies
     badges = [
-      { key: "glassdoorApplied", label: "Applied", color: "applied" },
       { key: "glassdoorCompanies", label: "Companies", color: "companies" },
+      { key: "glassdoorApplied", label: "Applied", color: "applied" },
     ];
   }
 
