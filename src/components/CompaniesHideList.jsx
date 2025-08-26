@@ -1,6 +1,6 @@
 // src/components/CompaniesHideList.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Button, Input, message, Skeleton, Tooltip, Switch, Empty, Modal } from "antd";
+import { Button, Input, message, Skeleton, Tooltip, Switch, Empty, Modal, Space } from "antd";
 import {
   LeftOutlined,
   CloseOutlined,
@@ -16,6 +16,25 @@ function getChrome() {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
   } catch { }
   return null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Detect current site (reused logic aligned with HideJobsFilters.jsx)
+// ─────────────────────────────────────────────────────────────
+function detectSite() {
+  const href = (typeof location !== "undefined" ? location.href : "") || "";
+  const host = (typeof location !== "undefined" ? location.hostname : "") || "";
+
+  const isLinkedIn =
+    host.includes("linkedin.com") &&
+    (/\/jobs\//.test(href) || href.includes("/jobs") || href.includes("/comm/"));
+  const isIndeed = host.includes("indeed.");
+  const isGlassdoor = host.includes("glassdoor.");
+
+  if (isLinkedIn) return "linkedin";
+  if (isIndeed) return "indeed";
+  if (isGlassdoor) return "glassdoor";
+  return "other";
 }
 
 export default function CompaniesHideList() {
@@ -43,6 +62,8 @@ export default function CompaniesHideList() {
   const ciSort = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
   const normalizedHas = (list, name) =>
     list.some((x) => normalize(x) === normalize(name));
+
+  const site = useMemo(detectSite, []);
 
   // hidden companies load
   useEffect(() => {
@@ -305,8 +326,82 @@ export default function CompaniesHideList() {
     });
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // Show empty state with 3 buttons when NOT on a supported job page
+  // ─────────────────────────────────────────────────────────────
+  if (site === "other") {
+    return (
+      <div className="space-y-4">
+        {contextHolder}
+        {modalContextHolder}
+
+        {/* Title row (keep consistent with normal view) */}
+        <div className="flex items-center justify-between -mt-1">
+          <div className="flex items-center gap-2">
+            {showBackToFilters && (
+              <Tooltip title="Back to Filters">
+                <Button
+                  type="text"
+                  icon={<LeftOutlined />}
+                  onClick={goBackToFilters}
+                  aria-label="Back to Filters"
+                />
+              </Tooltip>
+            )}
+            <h2 className="text-lg font-semibold text-hidejobs-700">
+              Hidden Companies
+            </h2>
+          </div>
+          <div className="flex items-center gap-3" />
+        </div>
+
+        <div className="rounded-lg border border-gray-200 p-6 text-center">
+          <Empty
+            description={
+              <span className="text-gray-600">
+                Please navigate to a job page to manage hidden companies.
+              </span>
+            }
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+          <div className="mt-6">
+            <Space direction="vertical" size="large" style={{ width: "100%" }}>
+              <Button
+                type="primary"
+                size="large"
+                block
+                href="https://www.linkedin.com/jobs/search"
+                target="_blank"
+              >
+                Go to LinkedIn Jobs
+              </Button>
+              <Button
+                type="primary"
+                size="large"
+                block
+                href="https://www.indeed.com/jobs"
+                target="_blank"
+              >
+                Go to Indeed Jobs
+              </Button>
+              <Button
+                type="primary"
+                size="large"
+                block
+                href="https://glassdoor.com/Job"
+                target="_blank"
+              >
+                Go to Glassdoor Jobs
+              </Button>
+            </Space>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {contextHolder}
       {modalContextHolder}
 
@@ -331,8 +426,7 @@ export default function CompaniesHideList() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span
-              className={`text-sm ${isSubscribed ? "text-gray-500" : "text-gray-400"
-                }`}
+              className={`text-sm ${isSubscribed ? "text-gray-500" : "text-gray-400"}`}
             >
               On/Off
             </span>
