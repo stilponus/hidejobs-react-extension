@@ -389,18 +389,17 @@ export default function CompanyLinkedinTour({ open, onClose, onStepChange }) {
   const stepTitle = step === 1 ? "Step 1" : step === 2 ? "Step 2" : step === 3 ? "Step 3" : "Step 4";
   const stepText =
     step === 1 ? (
-      "Turn ON the Companies filter here, or click Next to auto-enable it."
+      "To start hiding jobs from specific companies, turn ON the Companies filter here. This enables the company hiding feature across your job search. Turn it on now or click Next to continue."
     ) : step === 2 ? (
       <span>
-        Once the filter is ON you will see{" "}
-        <EyeInvisibleFilled className="text-hidejobs-700 icon-18" /> in every job card here.
-        If you click on it you can mark up the company to hide.
-        And then by clicking the button <strong>Hide Company</strong> you can hide all the jobs from this company.
+        Once the filter is ON, you'll see{" "}
+        <EyeInvisibleFilled className="text-hidejobs-700 icon-18" /> on every job card in this list.
+        Click the icon to select a company for hiding, then use the <strong className="text-hidejobs-red-700 text-base" >Hide Company</strong> button to remove all jobs from that company.
       </span>
     ) : step === 3 ? (
-      "Using the List button here you can always access the list of hidden companies."
+      "Use the List button to view and manage all the companies you're currently hiding. This is where you can manually add or remove companies from your hidden list."
     ) : (
-      "A quick badge appears here — use it to pause/resume hiding companies without changing your list."
+      "The Companies badge gives you instant control over company hiding. The number displays how many jobs are currently hidden from filtered companies, and you can click it to quickly pause or resume hiding without removing companies from your list."
     );
 
   return (

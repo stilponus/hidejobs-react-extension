@@ -442,20 +442,20 @@ export default function AddToTrackerTour({ open, onClose }) {
   const stepTitle = `Step ${step}`;
   const stepText =
     step === 1
-      ? "This is the job description on LinkedIn. Review it before saving to your tracker."
+      ? "Here's the job posting on LinkedIn. Whether you're planning to apply or have already applied, you can save this job to HideJobs to track your progress and tailor your resume."
       : step === 2
-        ? "Here you see the job title and company — the context for the job you're adding."
+        ? "This shows the job title and company name that HideJobs detected from the LinkedIn posting. Confirm these details match the position you want to track."
         : step === 3
-          ? "These are the categories of information HideJobs captured from the job post."
+          ? "These are the job details HideJobs automatically captured from the posting. Don't worry if something's missing—you can always add or edit any information in your tracker later."
           : step === 4
-            ? "Pick a Status to track where you are in the process. Choosing one moves you ahead."
+            ? "Select your application status—whether you're planning to apply, have already applied, or just want to bookmark this job. Choose a status now or click Next to continue."
             : step === 5
-              ? "Rate your interest in this job. Clicking stars or Next will advance."
+              ? "Rate your interest level for this job from 1 to 5 stars. This helps you prioritize and quickly find your most interesting opportunities later. Rate it now or click Next to continue."
               : step === 6
-                ? "Add your notes about this job for future reference."
+                ? "Add your personal notes about this position, company, or anything else that matters to you. You can always add or edit these notes later."
                 : step === 7
-                  ? "Finally, click Save to add this job to your tracker. We'll move on once it's saved."
-                  : "Great! Your job is saved. Here's where to find the title, captured details, and the Open saved job button.";
+                  ? "Finally, save this job to your HideJobs tracker. Click Save to add it now, or click Next and we'll handle the saving for you automatically."
+                  : "Great! Your job has been successfully added to your tracker. Click 'Open saved job' to view the full details in your HideJobs panel, or finish the tour and explore it whenever you're ready.";
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }} aria-hidden>

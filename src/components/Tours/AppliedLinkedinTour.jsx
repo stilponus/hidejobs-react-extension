@@ -356,12 +356,12 @@ export default function AppliedLinkedinTour({ open, onClose }) {
   const stepTitle = step === 1 ? "Step 1" : step === 2 ? "Step 2" : step === 3 ? "Step 3" : "Step 4";
   const stepText =
     step === 1
-      ? "Every time you apply, mark the job as Applied. If you apply on a company website, LinkedIn will show this prompt below when you return — click Yes to confirm. Jobs applied with Easy Apply are marked automatically."
+      ? "Always mark jobs as 'Applied' after submitting your application so you can hide them from your search results later. When applying on external company sites, LinkedIn displays this confirmation prompt (below) on your next visit—select 'Yes'. Jobs applied via LinkedIn's Easy Apply are automatically marked for you."
       : step === 2
-        ? "In order to start hiding applied jobs, turn ON the Applied filter. Try it here, or just click Next."
+        ? "To start hiding applied jobs from your search results, turn ON the Applied filter here. This will immediately hide all jobs you've marked as applied. Turn it on now or click Next to continue."
         : step === 3
-          ? "Turning a filter ON hides applied jobs immediately. A badge appears here as a quick control, showing how many are hidden. Click it anytime to pause or resume hiding without removing the badge."
-          : "Job cards marked as Applied will disappear from this list, letting you focus on opportunities that matter.";
+          ? "The Applied badge appears as your quick control center. It displays the total number of hidden applied jobs and lets you instantly toggle the hiding feature on/off. Click it anytime to pause or resume without losing your filter settings."
+          : "Job cards marked as Applied will now be hidden from this list, keeping your search focused on new opportunities you haven't applied to yet.";
 
   const hole = rect || { x: -9999, y: -9999, w: 0, h: 0 };
   const gap = 12;

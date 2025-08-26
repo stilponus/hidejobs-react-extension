@@ -563,9 +563,16 @@ export default function HideJobsFilters() {
           <Button
             size="small"
             icon={<EyeInvisibleFilled />}
-            onClick={disabled || (companiesTourOpen && companiesTourStep === 1) ? undefined : goToCompaniesList}
+            // disable clicks on step 1 OR step 3
+            onClick={disabled || (companiesTourOpen && (companiesTourStep === 1 || companiesTourStep === 3))
+              ? undefined
+              : goToCompaniesList}
+            // fully disabled only on step 1
             disabled={disabled || (companiesTourOpen && companiesTourStep === 1)}
-            style={(companiesTourOpen && companiesTourStep === 1) ? { cursor: "default" } : {}}
+            // default cursor for step 1 and 3
+            style={(companiesTourOpen && (companiesTourStep === 1 || companiesTourStep === 3))
+              ? { cursor: "default" }
+              : {}}
           >
             List
           </Button>

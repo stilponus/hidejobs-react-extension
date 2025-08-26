@@ -346,10 +346,10 @@ export default function InteractiveTour({ open, onClose }) {
   const stepTitle = step === 1 ? "Step 1" : step === 2 ? "Step 2" : "Step 3";
   const stepText =
     step === 1
-      ? "Turn ON any filter to activate it. Try the Dismissed filter now or click Next."
+      ? "To start hiding jobs from your search results, turn ON any filter you want to use—it will hide matching jobs immediately. Here's the Dismissed filter as an example—toggle it on now or click Next to continue."
       : step === 2
-        ? "Turning a filter ON hides jobs immediately. A badge appears here as a quick control — showing how many are hidden. Click it anytime to pause or resume hiding without removing the badge."
-        : "Job cards matching your filter will disappear from this list, so you can focus on opportunities that matter.";
+        ? "When you turn a filter ON, a badge for that filter appears here as your quick control. It shows how many jobs are currently hidden and lets you toggle the filter on/off without losing your settings."
+        : "When filters are active, matching job cards will be hidden from this list, keeping your search results clean and focused on relevant opportunities.";
 
   return (
     <div
