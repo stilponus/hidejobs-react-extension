@@ -404,7 +404,7 @@ const HideJobsPanelShell = () => {
           }
           .tooltip {
             position: absolute; top: -35px; left: -10px; transform: translateX(-50%);
-            background-color: #233b57; color: white; font-size: 12px; padding: 4px 8px;
+            background-color: #233b57; color: white; font-size: 14px; padding: 4px 8px;
             border-radius: 5px; white-space: nowrap; opacity: 0; transition: opacity 0.3s ease-in-out; pointer-events: none;
           }
         `}
@@ -425,7 +425,7 @@ const HideJobsPanelShell = () => {
 
       <div
         ref={containerRef}
-        className={`fixed top-[20px] right-[-400px] w-96 h-[90vh] rounded-xl shadow-2xl border-1 border-gray-200 bg-white z-[9999] flex flex-col overflow-hidden text-gray-800 font-sans transition-right duration-[0.4s] ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] user-select-none ${isPanelVisible ? "right-[20px]" : ""}`}
+        className={`fixed top-[20px] right-[-400px] w-96 h-[95vh] rounded-xl shadow-2xl border-1 border-gray-200 bg-white z-[9999] flex flex-col overflow-hidden text-gray-800 font-sans transition-right duration-[0.4s] ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] user-select-none ${isPanelVisible ? "right-[20px]" : ""}`}
       >
         {/* Sticky Header */}
         <div className="bg-hidejobs-50 shrink-0 sticky top-0 z-10 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
