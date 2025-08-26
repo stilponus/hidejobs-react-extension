@@ -95,17 +95,19 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
     ) : (
       <>
         {/* Header row with Help ("How it works") button */}
-        <div className="w-full flex items-start justify-end mb-2">
-          <Tooltip title="How it works">
-            <Button
-              type="text"
-              size="small"
-              icon={<QuestionCircleFilled className="text-gray-400" />}
-              onClick={() => setOpenTour(true)}
-              aria-label="How it works"
-            />
-          </Tooltip>
-        </div>
+        {!isJobSaved && (
+          <div className="w-full flex items-start justify-end mb-2">
+            <Tooltip title="How it works">
+              <Button
+                type="text"
+                size="small"
+                icon={<QuestionCircleFilled className="text-gray-400" />}
+                onClick={() => setOpenTour(true)}
+                aria-label="How it works"
+              />
+            </Tooltip>
+          </div>
+        )}
 
         {/* Title and company */}
         <div data-tour="addtracker-title" className="mb-3">

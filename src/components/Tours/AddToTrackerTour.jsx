@@ -118,6 +118,21 @@ function findNotesBlock() {
   return root.querySelector('[data-tour="addtracker-notes"]');
 }
 
+/** STEP 7 target: Save button */
+function findSaveButtonBlock() {
+  const root = getPanelShadowRoot();
+  if (!root) return null;
+  const byAttr = root.querySelector('[data-tour="addtracker-save"]');
+  if (byAttr) return byAttr;
+
+  const candidates = Array.from(root.querySelectorAll("button,[role='button']"));
+  const match = candidates.find((el) => {
+    const txt = (el.textContent || "").trim().toLowerCase();
+    return txt === "save" || txt === "saved" || txt === "saving";
+  });
+  return match || null;
+}
+
 export default function AddToTrackerTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
@@ -139,46 +154,42 @@ export default function AddToTrackerTour({ open, onClose }) {
     if (!open) return;
 
     const handler = (e) => {
-      console.log("Click detected:", e.target, "Step:", step);
-      
       // Step 4: Auto-advance when user selects dropdown option
       if (step === 4) {
-        // Check for dropdown item selection
-        if (e.target.closest('.ant-select-item-option') || 
-            e.target.closest('.ant-select-item') ||
-            (e.target.className && typeof e.target.className === 'string' && 
-             e.target.className.includes('ant-select-item'))) {
-          console.log("Step 4 dropdown selection detected, advancing to step 5");
+        if (
+          e.target.closest(".ant-select-item-option") ||
+          e.target.closest(".ant-select-item") ||
+          (e.target.className &&
+            typeof e.target.className === "string" &&
+            e.target.className.includes("ant-select-item"))
+        ) {
           setTimeout(() => setStep(5), 300);
           return;
         }
       }
-      
+
       // Step 5: Auto-advance when user clicks on star rating
       if (step === 5) {
-        if (e.target.closest('.ant-rate-star') ||
-            e.target.closest('[data-tour="addtracker-interest"] .ant-rate') ||
-            (e.target.className && typeof e.target.className === 'string' && 
-             e.target.className.includes('ant-rate'))) {
-          console.log("Step 5 rating selection detected, advancing to step 6");
+        if (
+          e.target.closest(".ant-rate-star") ||
+          e.target.closest('[data-tour="addtracker-interest"] .ant-rate")') ||
+          (e.target.className &&
+            typeof e.target.className === "string" &&
+            e.target.className.includes("ant-rate"))
+        ) {
           setTimeout(() => setStep(6), 300);
           return;
         }
       }
     };
 
-    // Use capture phase to catch events early
     document.addEventListener("click", handler, true);
     const root = getPanelShadowRoot();
-    if (root) {
-      root.addEventListener("click", handler, true);
-    }
-    
+    if (root) root.addEventListener("click", handler, true);
+
     return () => {
       document.removeEventListener("click", handler, true);
-      if (root) {
-        root.removeEventListener("click", handler, true);
-      }
+      if (root) root.removeEventListener("click", handler, true);
     };
   }, [open, step]);
 
@@ -193,6 +204,8 @@ export default function AddToTrackerTour({ open, onClose }) {
       else if (step === 4) el = findStatusBlock();
       else if (step === 5) el = findInterestBlock();
       else if (step === 6) el = findNotesBlock();
+      else if (step === 7) el = findSaveButtonBlock();
+
       if (!el) {
         setRect(null);
         return;
@@ -223,12 +236,11 @@ export default function AddToTrackerTour({ open, onClose }) {
   // Block interactions
   useEffect(() => {
     if (!open) return;
-    
-    // ✅ STEP 4: NO BLOCKING AT ALL - let user interact with dropdown freely
+
+    // Allow full interactions for Status dropdown (step 4)
     if (step === 4) return;
-    
+
     const PADDING = 8;
-    
     const isInsideHole = (ev) => {
       if (!rect) return false;
       const { clientX: x, clientY: y } = ev;
@@ -239,7 +251,6 @@ export default function AddToTrackerTour({ open, onClose }) {
         y <= rect.y + rect.h + PADDING
       );
     };
-    
     const isInsideBox = (ev) => {
       const el = boxRef.current;
       if (!el) return false;
@@ -249,18 +260,12 @@ export default function AddToTrackerTour({ open, onClose }) {
       }
       return el.contains(ev.target);
     };
-    
     const guard = (ev) => {
-      // ✅ General dropdown allowance for other steps
-      if (ev.target.closest(".ant-select-dropdown")) return;
-      
-      // Standard hole and box checks
+      if (ev.target.closest(".ant-select-dropdown")) return; // allow dropdown portal
       if (isInsideHole(ev) || isInsideBox(ev)) return;
-      
       ev.preventDefault();
       ev.stopPropagation();
     };
-    
     const onPointer = (ev) => guard(ev);
     const onWheel = (ev) => guard(ev);
     const onKey = (ev) => {
@@ -277,7 +282,7 @@ export default function AddToTrackerTour({ open, onClose }) {
       }
     };
     const onEsc = (e) => e.key === "Escape" && onClose?.();
-    
+
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("pointerup", onPointer, true);
     window.addEventListener("click", onPointer, true);
@@ -286,7 +291,7 @@ export default function AddToTrackerTour({ open, onClose }) {
     window.addEventListener("wheel", onWheel, { capture: true, passive: false });
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("keydown", onEsc);
-    
+
     return () => {
       window.removeEventListener("pointerdown", onPointer, true);
       window.removeEventListener("pointerup", onPointer, true);
@@ -310,7 +315,7 @@ export default function AddToTrackerTour({ open, onClose }) {
   const handleNext = () => {
     if (step === 1) {
       showPanelInstant(chromeApi).then(() => setStep(2));
-    } else if (step < 6) {
+    } else if (step < 7) {
       setStep(step + 1);
     }
   };
@@ -325,7 +330,7 @@ export default function AddToTrackerTour({ open, onClose }) {
   // Positioning
   let boxTop, boxLeft;
   if (step === 1 || step >= 4) {
-    // Force box to the LEFT for steps 1,4,5,6
+    // Force box to the LEFT for steps 1,4,5,6,7
     const preferLeft = hole.x - gap - boxW;
     const fitsLeft = preferLeft >= 12;
     boxLeft = fitsLeft ? preferLeft : 12;
@@ -349,7 +354,9 @@ export default function AddToTrackerTour({ open, onClose }) {
             ? "Pick a Status to track where you are in the process. Choosing one moves you ahead."
             : step === 5
               ? "Rate your interest in this job. Clicking stars or Next will advance."
-              : "Add your notes about this job for future reference.";
+              : step === 6
+                ? "Add your notes about this job for future reference."
+                : "Finally, click Save to add this job to your tracker.";
 
   return (
     <div
@@ -404,7 +411,7 @@ export default function AddToTrackerTour({ open, onClose }) {
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
         <div className="mt-3 flex items-center justify-end gap-2">
           {step > 1 && <Button onClick={handlePrev}>Previous</Button>}
-          {step < 6 ? (
+          {step < 7 ? (
             <Button type="primary" onClick={handleNext}>
               Next
             </Button>

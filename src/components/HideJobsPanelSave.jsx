@@ -134,6 +134,7 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
 
   return (
     <Button
+      data-tour="addtracker-save"
       type="primary"
       size="large"
       icon={isJobSaved ? <CheckOutlined /> : <PlusOutlined />}
