@@ -139,34 +139,47 @@ export default function AddToTrackerTour({ open, onClose }) {
     if (!open) return;
 
     const handler = (e) => {
-      const t = e.target;
+      console.log("Click detected:", e.target, "Step:", step);
       
-      // Step 4: Auto-advance when user selects ANY dropdown option
+      // Step 4: Auto-advance when user selects dropdown option
       if (step === 4) {
-        // Check if clicked on any dropdown item/option
-        if (t.closest('.ant-select-item') || 
-            t.closest('.ant-select-item-option') ||
-            (t.className && typeof t.className === 'string' && t.className.includes('ant-select-item'))) {
-          setTimeout(() => setStep(5), 200); // Small delay to let selection complete
+        // Check for dropdown item selection
+        if (e.target.closest('.ant-select-item-option') || 
+            e.target.closest('.ant-select-item') ||
+            (e.target.className && typeof e.target.className === 'string' && 
+             e.target.className.includes('ant-select-item'))) {
+          console.log("Step 4 dropdown selection detected, advancing to step 5");
+          setTimeout(() => setStep(5), 300);
           return;
         }
       }
       
-      // Step 5: Auto-advance when user clicks on any star rating
+      // Step 5: Auto-advance when user clicks on star rating
       if (step === 5) {
-        // Check if clicked within the interest block (stars)
-        if (t.closest('[data-tour="addtracker-interest"]') || 
-            t.closest('.ant-rate') ||
-            t.closest('.ant-rate-star') ||
-            (t.className && typeof t.className === 'string' && t.className.includes('ant-rate'))) {
-          setTimeout(() => setStep(6), 200); // Small delay to let rating complete
+        if (e.target.closest('.ant-rate-star') ||
+            e.target.closest('[data-tour="addtracker-interest"] .ant-rate') ||
+            (e.target.className && typeof e.target.className === 'string' && 
+             e.target.className.includes('ant-rate'))) {
+          console.log("Step 5 rating selection detected, advancing to step 6");
+          setTimeout(() => setStep(6), 300);
           return;
         }
       }
     };
 
+    // Use capture phase to catch events early
     document.addEventListener("click", handler, true);
-    return () => document.removeEventListener("click", handler, true);
+    const root = getPanelShadowRoot();
+    if (root) {
+      root.addEventListener("click", handler, true);
+    }
+    
+    return () => {
+      document.removeEventListener("click", handler, true);
+      if (root) {
+        root.removeEventListener("click", handler, true);
+      }
+    };
   }, [open, step]);
 
   // Measure current step target

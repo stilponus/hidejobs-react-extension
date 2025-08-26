@@ -118,7 +118,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
         </div>
 
         {/* Categories table */}
-        <table className="w-full mb-4 text-sm">
+        <table data-tour="addtracker-categories" className="w-full mb-4 text-sm">
           <tbody>
             {categoryPairs.map((pair, rowIdx) => (
               <tr key={rowIdx}>
@@ -153,7 +153,15 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
             {/* Status */}
             <div className="mb-3" data-tour="addtracker-status">
               <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Status</label>
-              <Select value={status} style={{ width: "100%" }} onChange={setStatus} className="text-sm">
+              <Select
+                value={status}
+                style={{ width: "100%" }}
+                onChange={(value) => {
+                  console.log("Status changed to:", value);
+                  setStatus(value);
+                }}
+                className="text-sm"
+              >
                 {jobStatuses.map((s) => (
                   <Option key={s.key} value={s.key}>
                     {s.label}
@@ -163,9 +171,15 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
             </div>
 
             {/* Interest */}
-            <div className="mb-3"data-tour="addtracker-interest">
+            <div className="mb-3" data-tour="addtracker-interest">
               <label className="block text-lg font-semibold text-hidejobs-700 mb-1">Interest</label>
-              <Rate value={rating} onChange={setRating} />
+              <Rate
+                value={rating}
+                onChange={(value) => {
+                  console.log("Rating changed to:", value);
+                  setRating(value);
+                }}
+              />
             </div>
 
             {/* Notes */}
