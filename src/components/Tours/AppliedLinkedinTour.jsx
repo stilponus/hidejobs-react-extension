@@ -10,7 +10,7 @@ import { CloseOutlined } from "@ant-design/icons";
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -26,7 +26,7 @@ function setPanelVisible(visible, { instant = false } = {}) {
       detail: { visible, instant },
     });
     window.dispatchEvent(evt);
-  } catch {}
+  } catch { }
 }
 
 /** Belt-and-suspenders helpers to remove animation race conditions */
@@ -42,7 +42,7 @@ function openPanelInstant(chromeApi, view = "filters") {
         try {
           const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view } });
           window.dispatchEvent(evt);
-        } catch {}
+        } catch { }
         raf(() => {
           setPanelVisible(true, { instant: true });
           raf(() => {
@@ -144,6 +144,33 @@ export default function AppliedLinkedinTour({ open, onClose }) {
     closePanelInstant(chromeApi);
   }, [open, chromeApi]);
 
+  // ⛔️ Step 1: turn OFF "Keywords" and "Filter by Hours" instantly
+  useEffect(() => {
+    if (!open || !chromeApi) return;
+    if (step !== 1) return;
+
+    const toSet = {
+      // Keywords (shared across LI/Indeed/Glassdoor)
+      userTextBadgeVisible: false,
+      userText: false,
+
+      // Filter by Hours (LinkedIn-only badge/panel)
+      filterByHoursBadgeVisible: false,
+      filterByHours: false,
+    };
+
+    chromeApi.storage.local.set(toSet, () => {
+      // Broadcast to the panel so the UI mirrors flip OFF everywhere
+      try {
+        const detail = {
+          userText: false,
+          filterByHours: false,
+        };
+        window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
+      } catch { }
+    });
+  }, [open, step, chromeApi]);
+
   /* ✅ Step 2: only reset compact + applied toggle */
   useEffect(() => {
     if (!open || !chromeApi) return;
@@ -159,7 +186,7 @@ export default function AppliedLinkedinTour({ open, onClose }) {
       try {
         const detail = { applied: false };
         window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
-      } catch {}
+      } catch { }
     });
   }, [open, step, chromeApi]);
 
@@ -331,10 +358,10 @@ export default function AppliedLinkedinTour({ open, onClose }) {
     step === 1
       ? "Every time you apply, mark the job as Applied. If you apply on a company website, LinkedIn will show this prompt below when you return — click Yes to confirm. Jobs applied with Easy Apply are marked automatically."
       : step === 2
-      ? "In order to start hiding applied jobs, turn ON the Applied filter. Try it here, or just click Next."
-      : step === 3
-      ? "Turning a filter ON hides applied jobs immediately. A badge appears here as a quick control, showing how many are hidden. Click it anytime to pause or resume hiding without removing the badge."
-      : "Job cards marked as Applied will disappear from this list, letting you focus on opportunities that matter.";
+        ? "In order to start hiding applied jobs, turn ON the Applied filter. Try it here, or just click Next."
+        : step === 3
+          ? "Turning a filter ON hides applied jobs immediately. A badge appears here as a quick control, showing how many are hidden. Click it anytime to pause or resume hiding without removing the badge."
+          : "Job cards marked as Applied will disappear from this list, letting you focus on opportunities that matter.";
 
   const hole = rect || { x: -9999, y: -9999, w: 0, h: 0 };
   const gap = 12;

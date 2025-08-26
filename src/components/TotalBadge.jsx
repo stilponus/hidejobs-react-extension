@@ -1,67 +1,89 @@
 // src/components/TotalBadge.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { Tooltip } from "antd";
-import { CloseOutlined } from "@ant-design/icons";
 
 const ENABLED_BG = "#444444";
 const CHIP_BG = "#f8fafd";
 const CHIP_TEXT = "#00000099";
 const LABEL_TEXT_ON = "#ffffff";
 
-const TOGGLE_KEYS = [
-  "dismissedHidden",
-  "promotedHidden",
-  "appliedHidden",
-  "viewedHidden",
-  "companiesHidden",
-  "userTextHidden",
-  "repostedGhostHidden",
-  "indeedSponsoredHidden",
-  "glassdoorAppliedHidden",
-  "indeedAppliedHidden",
-  "filterByHoursHidden",
-];
+// Master visibility key (from Filters → Settings)
+const VISIBILITY_KEY = "totalOnPageBadgeVisible";
 
-const isJobPage = () =>
-  location.href.startsWith("https://www.linkedin.com/jobs/search") ||
-  location.href.startsWith("https://www.linkedin.com/jobs/collections");
+// --- Session & site helpers (match content scripts) ---
+function getSessionId() {
+  try {
+    if (typeof window.name === "string" && window.name.startsWith("HJ_TAB_")) return window.name;
+    const id = "HJ_TAB_" + Math.random().toString(36).slice(2, 10);
+    window.name = id;
+    return id;
+  } catch {
+    return "HJ_TAB_fallback";
+  }
+}
+function getSiteName() {
+  const host = location.hostname.toLowerCase();
+  if (host.includes("linkedin.com")) return "linkedin";
+  if (host.includes("indeed.")) return "indeed";
+  if (host.includes("glassdoor.")) return "glassdoor";
+  return "other";
+}
+const SESSION_ID = getSessionId();
+const SITE_NAME = getSiteName();
+
+const TAB_KEY = `hj_totalHiddenOnPage__${SITE_NAME}__tab_${SESSION_ID}`;
+const SITE_KEY = `hj_totalHiddenOnPage__${SITE_NAME}`;
+const LEGACY_KEY = "totalHiddenOnPage"; // final fallback
+
+// Should show on these pages only
+const isJobPage = () => {
+  const host = location.hostname.toLowerCase();
+  const href = location.href.toLowerCase();
+  if (host.includes("linkedin.com")) {
+    return href.startsWith("https://www.linkedin.com/jobs/search") ||
+      href.startsWith("https://www.linkedin.com/jobs/collections");
+  }
+  if (host.includes("indeed.")) return href.includes("/jobs");
+  if (host.includes("glassdoor.")) return href.includes("/job");
+  return false;
+};
 
 export default function TotalBadge({ compact = false }) {
   const [total, setTotal] = useState(0);
   const [show, setShow] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
   const lastUrl = useRef(location.href);
 
-  const recompute = (snap) => {
-    const count = Number(snap?.totalHiddenOnPage || 0);
+  function pickTotal(snap) {
+    if (typeof snap?.[TAB_KEY] === "number") return snap[TAB_KEY];
+    if (typeof snap?.[SITE_KEY] === "number") return snap[SITE_KEY];
+    if (typeof snap?.[LEGACY_KEY] === "number") return snap[LEGACY_KEY];
+    return 0;
+  }
+
+  function recomputeFromSnap(snap) {
+    const rawEnabled = snap?.[VISIBILITY_KEY];
+    const enabled = typeof rawEnabled === "boolean" ? rawEnabled : true;
+    const count = pickTotal(snap);
     setTotal(count);
-    const anyOn = TOGGLE_KEYS.some((k) => !!snap?.[k]);
-    setShow(isJobPage() && anyOn && count > 0);
-  };
+    setShow(isJobPage() && enabled && count > 0);
+  }
 
   useEffect(() => {
-    chrome?.storage?.local?.get(["totalHiddenOnPage", ...TOGGLE_KEYS], recompute);
+    chrome?.storage?.local?.get([TAB_KEY, SITE_KEY, LEGACY_KEY, VISIBILITY_KEY], (snap) => {
+      if (typeof snap?.[VISIBILITY_KEY] !== "boolean") {
+        chrome?.storage?.local?.set({ totalOnPageBadgeVisible: true });
+      }
+      recomputeFromSnap(snap);
+    });
   }, []);
 
   useEffect(() => {
     const onChange = (changes, area) => {
       if (area !== "local") return;
-
-      if ("totalHiddenOnPage" in changes) {
-        const nv = Number(changes.totalHiddenOnPage.newValue || 0);
-        setTotal(nv);
-        chrome?.storage?.local?.get(TOGGLE_KEYS, (toggles) => {
-          const anyOn = TOGGLE_KEYS.some((k) => !!toggles?.[k]);
-          setShow(isJobPage() && anyOn && nv > 0);
-        });
-        return;
-      }
-
-      if (TOGGLE_KEYS.some((k) => k in changes)) {
-        chrome?.storage?.local?.get(["totalHiddenOnPage", ...TOGGLE_KEYS], recompute);
+      if (TAB_KEY in changes || SITE_KEY in changes || LEGACY_KEY in changes || VISIBILITY_KEY in changes) {
+        chrome?.storage?.local?.get([TAB_KEY, SITE_KEY, LEGACY_KEY, VISIBILITY_KEY], recomputeFromSnap);
       }
     };
-
     chrome?.storage?.onChanged?.addListener(onChange);
     return () => chrome?.storage?.onChanged?.removeListener(onChange);
   }, []);
@@ -70,13 +92,13 @@ export default function TotalBadge({ compact = false }) {
     const id = setInterval(() => {
       if (location.href !== lastUrl.current) {
         lastUrl.current = location.href;
-        chrome?.storage?.local?.get(["totalHiddenOnPage", ...TOGGLE_KEYS], recompute);
+        chrome?.storage?.local?.get([TAB_KEY, SITE_KEY, LEGACY_KEY, VISIBILITY_KEY], recomputeFromSnap);
       }
     }, 1000);
     return () => clearInterval(id);
   }, []);
 
-  if (!show || dismissed) return null;
+  if (!show) return null;
 
   const chipStyle = {
     height: 20,
@@ -94,7 +116,6 @@ export default function TotalBadge({ compact = false }) {
     boxSizing: "border-box",
   };
 
-  // COMPACT variant → no ❌ button
   if (compact) {
     const outerStyle = {
       height: 32,
@@ -109,7 +130,6 @@ export default function TotalBadge({ compact = false }) {
       userSelect: "none",
       gap: 6,
     };
-
     return (
       <Tooltip title="Total hidden on page" placement="right">
         <div style={outerStyle}>
@@ -119,7 +139,6 @@ export default function TotalBadge({ compact = false }) {
     );
   }
 
-  // FULL variant → includes ❌
   const baseBtnStyle = {
     display: "inline-flex",
     alignItems: "center",
@@ -133,16 +152,13 @@ export default function TotalBadge({ compact = false }) {
     color: LABEL_TEXT_ON,
     border: "none",
     cursor: "default",
+    userSelect: "none",
   };
 
   return (
     <div style={baseBtnStyle}>
       <span style={chipStyle}>{total}</span>
       <span style={{ fontSize: 16 }}>Hidden on Page</span>
-      <CloseOutlined
-        onClick={() => setDismissed(true)}
-        style={{ color: "#fff", fontSize: 12, cursor: "pointer" }}
-      />
     </div>
   );
 }

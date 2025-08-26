@@ -398,7 +398,7 @@ export default function CompanyLinkedinTour({ open, onClose, onStepChange }) {
         And then by clicking the button <strong>Hide Company</strong> you can hide all the jobs from this company.
       </span>
     ) : step === 3 ? (
-      "Turn ON the Companies filter here, or click Next to auto-enable it."
+      "Using the List button here you can always access the list of hidden companies."
     ) : (
       "A quick badge appears here — use it to pause/resume hiding companies without changing your list."
     );

@@ -118,10 +118,21 @@ export default function KeywordFilterPanel({ visible }) {
   };
 
   const addKeyword = () => {
-    const k = (input || "").trim();
-    if (!k) return;
+    const rawInput = (input || "").trim();
+    if (!rawInput) return;
 
-    const next = Array.from(new Set([...keywords, k])).sort((a, b) => a.localeCompare(b));
+    // Split by comma and clean up each keyword
+    const newKeywords = rawInput
+      .split(',')
+      .map(k => k.trim())
+      .filter(k => k.length > 0); // Remove empty strings
+
+    if (newKeywords.length === 0) return;
+
+    // Combine with existing keywords, remove duplicates, and sort
+    const next = Array.from(new Set([...keywords, ...newKeywords]))
+      .sort((a, b) => a.localeCompare(b));
+
     persistKeywords(next);
     setInput("");
 
@@ -142,7 +153,7 @@ export default function KeywordFilterPanel({ visible }) {
     if (e.button !== 0) return; // left click only
     const target = e.target;
 
-    // Ignore interactions on focusable controls (don’t start drag, don’t blur)
+    // Ignore interactions on focusable controls (don't start drag, don't blur)
     if (target.closest("input, textarea, button, .ant-input, .ant-btn, .ant-tag-close-icon")) return;
 
     // ✅ Ensure any focused control (like the Input) loses focus so its outline disappears
@@ -278,7 +289,7 @@ export default function KeywordFilterPanel({ visible }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onPressEnter={addKeyword}
-              placeholder="Type keyword and press Enter"
+              placeholder="Type keywords and press Enter"
               prefix={<EyeInvisibleOutlined style={{ color: "#5f6163" }} />}
               style={{ marginBottom: 8 }}
               onMouseDown={(e) => e.stopPropagation()}

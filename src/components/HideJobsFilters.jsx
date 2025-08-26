@@ -47,6 +47,10 @@ const FILTER_KEYS = [
   // Keywords UI mirrors (shared back-end key)
   "indeedUserText",
   "glassdoorUserText",
+
+  // Not in the main rows anymore, but still part of state/storage:
+  // "totalOnPage" lives in Settings container now
+  "totalOnPage",
 ];
 
 const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
@@ -135,6 +139,7 @@ export default function HideJobsFilters() {
         "userText",
         "filterByHours",
         "repostedGhost",
+        // "totalOnPage" now lives in Settings, so not here
       ]);
     }
     if (site === "indeed") {
@@ -143,6 +148,7 @@ export default function HideJobsFilters() {
         "indeedApplied",
         "indeedCompanies",    // Companies (Indeed)
         "indeedUserText",
+        // "totalOnPage" now lives in Settings, so not here
       ]);
     }
     if (site === "glassdoor") {
@@ -150,6 +156,7 @@ export default function HideJobsFilters() {
         "glassdoorApplied",
         "glassdoorCompanies", // Companies (Glassdoor)
         "glassdoorUserText",
+        // "totalOnPage" now lives in Settings, so not here
       ]);
     }
     return new Set();
@@ -212,6 +219,9 @@ export default function HideJobsFilters() {
         // Shared Keywords toggle
         "userTextBadgeVisible",
         "userText",
+
+        // NEW: master toggle for Total badge
+        "totalOnPageBadgeVisible",
       ],
       async (res) => {
         const next = { ...DEFAULT_STATE };
@@ -245,6 +255,14 @@ export default function HideJobsFilters() {
 
         // Reposted ghost follows the feature badge
         next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
+
+        // NEW: default "Total on Page" to TRUE if never set
+        if (typeof res?.totalOnPageBadgeVisible === "boolean") {
+          next.totalOnPage = !!res.totalOnPageBadgeVisible;
+        } else {
+          next.totalOnPage = true; // sensible default
+          chromeApi.storage.local.set({ totalOnPageBadgeVisible: true });
+        }
 
         setValues(next);
         setCompact(!!res?.badgesCompact);
@@ -330,6 +348,12 @@ export default function HideJobsFilters() {
         delta.companies = companiesOnDelta;
         delta.indeedCompanies = companiesOnDelta;
         delta.glassdoorCompanies = companiesOnDelta;
+        touched = true;
+      }
+
+      // NEW: reflect master toggle for Total badge
+      if ("totalOnPageBadgeVisible" in changes) {
+        delta.totalOnPage = !!changes.totalOnPageBadgeVisible.newValue;
         touched = true;
       }
 
@@ -493,7 +517,7 @@ export default function HideJobsFilters() {
     } catch { }
   };
 
-  // All possible rows (filtered per site below)
+  // All possible rows (filtered per site below) — does NOT include totalOnPage now
   const rows = [
     { key: "dismissed", label: "Dismissed" },
     { key: "promoted", label: "Promoted" },
@@ -503,8 +527,8 @@ export default function HideJobsFilters() {
 
     // Companies rows (ALL premium, shared tour UX)
     { key: "companies", label: "Companies (LinkedIn)", premium: true, tourKey: "companies" },
-    { key: "indeedCompanies", label: "Companies (Indeed)", premium: true, tourKey: "companies" },
-    { key: "glassdoorCompanies", label: "Companies (Glassdoor)", premium: true, tourKey: "companies" },
+    { key: "indeedCompanies", label: "Companies (Indeed)", premium: true },
+    { key: "glassdoorCompanies", label: "Companies (Glassdoor)", premium: true },
 
     { key: "userText", label: "Keywords", premium: true },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
@@ -598,7 +622,7 @@ export default function HideJobsFilters() {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
           </div>
         </div>
@@ -631,7 +655,7 @@ export default function HideJobsFilters() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <h2 className="text-lg font-semibold text-hidejobs-700">Filters</h2>
           {site === "linkedin" && (
             <Tooltip title="How it works">
@@ -645,12 +669,11 @@ export default function HideJobsFilters() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Smaller badges</span>
-          <Switch size="small" checked={!!compact} onChange={updateCompact} />
-        </div>
+        {/* compact switch moved to Settings */}
+        <div className="flex items-center gap-2" />
       </div>
 
+      {/* Main toggles container */}
       <div className="rounded-lg border border-gray-200">
         {/* Free rows */}
         {freeRows.map((row, idx) =>
@@ -674,6 +697,31 @@ export default function HideJobsFilters() {
             )}
           </div>
         )}
+      </div>
+
+      {/* NEW: Settings container */}
+      <div className="rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-semibold text-hidejobs-700">Settings</span>
+          </div>
+        </div>
+
+        {/* Smaller badges (compact) */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+          <span className="truncate">Smaller badges</span>
+          <Switch size="small" checked={!!compact} onChange={updateCompact} />
+        </div>
+
+        {/* Total on Page */}
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="truncate">Total hidden on page</span>
+          <Switch
+            size="small"
+            checked={!!values.totalOnPage}
+            onChange={(checked) => updateValue("totalOnPage", checked)}
+          />
+        </div>
       </div>
 
       {!isSubscribed && <SubscribeButton />}

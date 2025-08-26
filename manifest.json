@@ -103,6 +103,7 @@
         "https://*.indeed.jp/*"
       ],
       "js": [
+        "content-total-counter-indeed.js",
         "content-applied-indeed.js",
         "content-sponsored-indeed.js",
         "content-companies-indeed.js",
@@ -125,6 +126,7 @@
         "https://*.glassdoor.co.in/*"
       ],
       "js": [
+        "content-total-counter-glassdoor.js",
         "content-keywords-glassdoor.js",
         "content-applied-glassdoor.js",
         "content-companies-glassdoor.js"

@@ -172,6 +172,15 @@ function clearRepostedBadgesFromDOM() {
   color: inherit !important;
 }
 
+.text-gray-400 {
+  color: #9ca3af !important; /* Tailwind text-gray-400 */
+}
+
+.text-gray-400 svg {
+  fill: currentColor !important;
+  color: inherit !important;
+}
+
 .icon-18 {
   font-size: 18px !important;
 }
