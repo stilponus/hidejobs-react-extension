@@ -391,7 +391,7 @@ export default function InteractiveTour({ open, onClose }) {
             </Button>
           ) : (
             <Button type="primary" onClick={onClose}>
-              Close
+              Finish
             </Button>
           )}
         </div>

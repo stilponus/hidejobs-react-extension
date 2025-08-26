@@ -461,7 +461,7 @@ export default function AppliedLinkedinTour({ open, onClose }) {
             </Button>
           ) : (
             <Button type="primary" onClick={onClose}>
-              Close
+              Finish
             </Button>
           )}
         </div>

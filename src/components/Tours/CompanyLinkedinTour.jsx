@@ -469,7 +469,7 @@ export default function CompanyLinkedinTour({ open, onClose, onStepChange }) {
             </Button>
           ) : (
             <Button type="primary" onClick={onClose}>
-              Close
+              Finish
             </Button>
           )}
         </div>

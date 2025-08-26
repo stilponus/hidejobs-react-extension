@@ -1,18 +1,15 @@
 // src/components/CompaniesHideList.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Button, Input, message, Divider, Skeleton, Tooltip, Switch, Empty } from "antd";
+import { Button, Input, message, Skeleton, Tooltip, Switch, Empty, Modal } from "antd";
 import {
   LeftOutlined,
   CloseOutlined,
   PlusOutlined,
   EyeInvisibleFilled,
+  DeleteOutlined,
 } from "@ant-design/icons";
 
 import SubscribeButton from "./SubscribeButton";
-
-const TOP_CACHE_KEY = "topHiddenCompaniesCache";
-const TOP_CACHE_TS_KEY = "topHiddenCompaniesCacheAt";
-const TTL_MS = 12 * 60 * 60 * 1000; // 12h
 
 function getChrome() {
   try {
@@ -25,9 +22,8 @@ export default function CompaniesHideList() {
   const chromeApi = useMemo(getChrome, []);
   const [companies, setCompanies] = useState([]);
   const [newCompany, setNewCompany] = useState("");
-  const [topCompanies, setTopCompanies] = useState([]);
-  const [loadingTop, setLoadingTop] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
+  const [modal, modalContextHolder] = Modal.useModal();
 
   // subscription
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -39,9 +35,14 @@ export default function CompaniesHideList() {
   // breadcrumb back button
   const [showBackToFilters, setShowBackToFilters] = useState(false);
 
+  // cloud save/load spinners
+  const [cloudSaving, setCloudSaving] = useState(false);
+  const [cloudLoading, setCloudLoading] = useState(false);
+
   const normalize = (s) => (s || "").trim().toLowerCase();
   const ciSort = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
-  const normalizedHas = (list, name) => list.some((x) => normalize(x) === normalize(name));
+  const normalizedHas = (list, name) =>
+    list.some((x) => normalize(x) === normalize(name));
 
   // hidden companies load
   useEffect(() => {
@@ -68,13 +69,16 @@ export default function CompaniesHideList() {
       return;
     }
 
-    // ⬇️ Include Glassdoor in initial read + unification
     chromeApi.storage.local.get(
-      ["isSubscribed", "companiesBadgeVisible", "indeedCompaniesBadgeVisible", "glassdoorCompaniesBadgeVisible"],
+      [
+        "isSubscribed",
+        "companiesBadgeVisible",
+        "indeedCompaniesBadgeVisible",
+        "glassdoorCompaniesBadgeVisible",
+      ],
       (res) => {
         setIsSubscribed(!!res?.isSubscribed);
 
-        // unify initial state across LinkedIn + Indeed + Glassdoor company toggles
         const initialOn =
           !!res?.companiesBadgeVisible ||
           !!res?.indeedCompaniesBadgeVisible ||
@@ -82,14 +86,13 @@ export default function CompaniesHideList() {
 
         setCompaniesFeatureOn(initialOn);
 
-        // force-sync all three keys so everything starts consistent
         chromeApi.storage.local.set({
           companiesBadgeVisible: initialOn,
           companiesHidden: initialOn,
           indeedCompaniesBadgeVisible: initialOn,
           indeedCompaniesHidden: initialOn,
-          glassdoorCompaniesBadgeVisible: initialOn, // NEW
-          glassdoorCompaniesHidden: initialOn,       // NEW
+          glassdoorCompaniesBadgeVisible: initialOn,
+          glassdoorCompaniesHidden: initialOn,
         });
 
         setSubscriptionLoading(false);
@@ -105,20 +108,24 @@ export default function CompaniesHideList() {
 
     const onStore = (changes, area) => {
       if (area !== "local") return;
-      if ("isSubscribed" in changes) setIsSubscribed(!!changes.isSubscribed.newValue);
+      if ("isSubscribed" in changes)
+        setIsSubscribed(!!changes.isSubscribed.newValue);
 
-      // keep master switch mirrored with ANY of the three toggles and immediately sync all three
       if (
         "companiesBadgeVisible" in changes ||
         "indeedCompaniesBadgeVisible" in changes ||
-        "glassdoorCompaniesBadgeVisible" in changes // NEW
+        "glassdoorCompaniesBadgeVisible" in changes
       ) {
         chromeApi.storage.local.get(
-          ["companiesBadgeVisible", "indeedCompaniesBadgeVisible", "glassdoorCompaniesBadgeVisible"], // NEW
+          [
+            "companiesBadgeVisible",
+            "indeedCompaniesBadgeVisible",
+            "glassdoorCompaniesBadgeVisible",
+          ],
           (r) => {
             const li = !!r?.companiesBadgeVisible;
             const ind = !!r?.indeedCompaniesBadgeVisible;
-            const gd = !!r?.glassdoorCompaniesBadgeVisible; // NEW
+            const gd = !!r?.glassdoorCompaniesBadgeVisible;
             const next = li || ind || gd;
             setCompaniesFeatureOn(next);
             chromeApi.storage.local.set({
@@ -126,8 +133,8 @@ export default function CompaniesHideList() {
               companiesHidden: next,
               indeedCompaniesBadgeVisible: next,
               indeedCompaniesHidden: next,
-              glassdoorCompaniesBadgeVisible: next, // NEW
-              glassdoorCompaniesHidden: next,       // NEW
+              glassdoorCompaniesBadgeVisible: next,
+              glassdoorCompaniesHidden: next,
             });
           }
         );
@@ -147,67 +154,6 @@ export default function CompaniesHideList() {
       }
     });
   }, []);
-
-  // top 5 load
-  useEffect(() => {
-    let aborted = false;
-
-    const useData = (arr) => {
-      if (aborted) return;
-      const sorted = (arr || [])
-        .slice()
-        .sort(
-          (x, y) =>
-            (Number(y.hiddenByUsersCount) || 0) - (Number(x.hiddenByUsersCount) || 0) ||
-            (x.companyName || "").localeCompare(y.companyName || "", undefined, {
-              sensitivity: "base",
-            })
-        )
-        .map((item, idx) => ({ ...item, rank: idx + 1 }));
-      setTopCompanies(sorted);
-    };
-
-    setLoadingTop(true);
-
-    chrome?.storage?.local?.get([TOP_CACHE_KEY, TOP_CACHE_TS_KEY], (res) => {
-      const cached = res?.[TOP_CACHE_KEY] || null;
-      const cachedAt = Number(res?.[TOP_CACHE_TS_KEY] || 0);
-      const fresh = cached && cachedAt && Date.now() - cachedAt < TTL_MS;
-
-      if (fresh) {
-        useData(cached);
-        setLoadingTop(false);
-      } else {
-        chrome?.runtime?.sendMessage?.({ type: "get-top-hidden-companies" }, (resp) => {
-          if (aborted) return;
-
-          if (chrome.runtime?.lastError || !resp?.success || !Array.isArray(resp.data)) {
-            setTopCompanies([]);
-            setLoadingTop(false);
-            return;
-          }
-
-          useData(resp.data);
-
-          chrome?.storage?.local?.set({
-            [TOP_CACHE_KEY]: resp.data,
-            [TOP_CACHE_TS_KEY]: Date.now(),
-          });
-
-          setLoadingTop(false);
-        });
-      }
-    });
-
-    return () => {
-      aborted = true;
-    };
-  }, []);
-
-  const filteredTop = React.useMemo(
-    () => topCompanies.filter((t) => !normalizedHas(companies, t.companyName)),
-    [topCompanies, companies]
-  );
 
   const removeOne = (name) => {
     chrome?.storage?.local?.get(["hiddenCompanies"], (res) => {
@@ -245,18 +191,6 @@ export default function CompaniesHideList() {
         setCompanies(updated);
         if (!rawName) setNewCompany("");
         messageApi.success(`Added "${raw}" to hidden list.`);
-
-        setTopCompanies((prev) =>
-          prev.filter((item) => normalize(item.companyName) !== normalize(raw))
-        );
-
-        chrome?.storage?.local?.get([TOP_CACHE_KEY], (r) => {
-          const cached = Array.isArray(r?.[TOP_CACHE_KEY]) ? r[TOP_CACHE_KEY] : [];
-          const next = cached.filter(
-            (item) => normalize(item.companyName) !== normalize(raw)
-          );
-          chrome?.storage?.local?.set({ [TOP_CACHE_KEY]: next });
-        });
       });
     });
   };
@@ -278,27 +212,103 @@ export default function CompaniesHideList() {
     if (!isSubscribed) return;
     setCompaniesFeatureOn(checked);
 
-    // ⬇️ Master toggle syncs all three: LinkedIn, Indeed, Glassdoor
+    if (checked) {
+      messageApi.success("Companies filter enabled");
+    } else {
+      messageApi.info("Companies filter disabled");
+    }
+
     chrome?.storage?.local?.set({
       companiesBadgeVisible: checked,
       companiesHidden: checked,
       indeedCompaniesBadgeVisible: checked,
       indeedCompaniesHidden: checked,
-      glassdoorCompaniesBadgeVisible: checked, // NEW
-      glassdoorCompaniesHidden: checked,       // NEW
+      glassdoorCompaniesBadgeVisible: checked,
+      glassdoorCompaniesHidden: checked,
     });
 
     try {
       const evt = new CustomEvent("hidejobs-filters-changed", {
-        detail: { companies: checked, indeedCompanies: checked, glassdoorCompanies: checked }, // include GD mirror
+        detail: {
+          companies: checked,
+          indeedCompanies: checked,
+          glassdoorCompanies: checked,
+        },
       });
       window.dispatchEvent(evt);
     } catch { }
   };
 
+  const saveToCloud = async () => {
+    try {
+      setCloudSaving(true);
+      const resp = await chrome.runtime.sendMessage({
+        type: "cloud-save-hidden-companies",
+        payload: { list: companies },
+      });
+      if (resp?.success) {
+        messageApi.success(
+          `Saved ${resp.data?.savedCount ?? companies.length} companies to your account.`
+        );
+      } else {
+        throw new Error(resp?.error || "Save failed");
+      }
+    } catch (e) {
+      messageApi.error(`Save failed: ${e?.message || String(e)}`);
+    } finally {
+      setCloudSaving(false);
+    }
+  };
+
+  const loadFromCloud = async () => {
+    try {
+      setCloudLoading(true);
+      const resp = await chrome.runtime.sendMessage({
+        type: "cloud-load-hidden-companies",
+      });
+      if (resp?.success && Array.isArray(resp.data?.hideList)) {
+        const loaded = resp.data.hideList.slice().sort(ciSort);
+        await chrome.storage.local.set({ hiddenCompanies: loaded });
+        setCompanies(loaded);
+        messageApi.success(
+          `Loaded ${loaded.length} companies from your account.`
+        );
+      } else {
+        throw new Error(resp?.error || "Load failed");
+      }
+    } catch (e) {
+      messageApi.error(`Load failed: ${e?.message || String(e)}`);
+    } finally {
+      setCloudLoading(false);
+    }
+  };
+
+  const clearAllCompanies = () => {
+    modal.confirm({
+      icon: null,
+      title: "Clear all hidden companies?",
+      content:
+        "This will remove your entire hidden companies list in the browser. To clear it completely from your account, click Save after removal.",
+      okText: "Clear",
+      cancelText: "Cancel",
+      okButtonProps: { type: "primary", danger: true },
+      onOk: async () => {
+        try {
+          await chrome.storage.local.set({ hiddenCompanies: [] });
+          setCompanies([]);
+          messageApi.success("All hidden companies cleared");
+        } catch (err) {
+          console.error("Error clearing companies:", err);
+          messageApi.error("Failed to clear companies");
+        }
+      },
+    });
+  };
+
   return (
     <div className="space-y-3">
       {contextHolder}
+      {modalContextHolder}
 
       {/* Title row */}
       <div className="flex items-center justify-between -mt-1">
@@ -349,7 +359,7 @@ export default function CompaniesHideList() {
         </div>
       </div>
 
-      {/* Subscription loading skeleton OR Subscribe button — NOW below the title */}
+      {/* Subscription loading skeleton OR Subscribe button */}
       {subscriptionLoading ? (
         <div className="rounded-md border border-gray-200 p-3">
           <Skeleton active paragraph={{ rows: 2 }} />
@@ -358,7 +368,7 @@ export default function CompaniesHideList() {
         !isSubscribed && <SubscribeButton />
       )}
 
-      {/* ADD FORM — moved BELOW subscribe */}
+      {/* ADD FORM */}
       <div className="flex items-center gap-2">
         <Input
           value={newCompany}
@@ -375,6 +385,40 @@ export default function CompaniesHideList() {
         >
           Add
         </Button>
+      </div>
+
+      {/* Cloud Load/Save buttons + Delete all */}
+      <div className="flex items-center gap-2 justify-between">
+        <div className="flex items-center gap-2">
+          <Tooltip title="Save to your account">
+            <Button
+              type="primary"
+              onClick={saveToCloud}
+              loading={cloudSaving}
+              disabled={cloudLoading}
+            >
+              Save
+            </Button>
+          </Tooltip>
+          <Tooltip title="Load from your account">
+            <Button
+              onClick={loadFromCloud}
+              loading={cloudLoading}
+              disabled={cloudSaving}
+            >
+              Load
+            </Button>
+          </Tooltip>
+        </div>
+        {companies.length > 0 && (
+          <Tooltip title="Clear all hidden companies">
+            <Button
+              type="text"
+              icon={<DeleteOutlined />}
+              onClick={clearAllCompanies}
+            />
+          </Tooltip>
+        )}
       </div>
 
       {/* Companies list / Empty */}
@@ -415,50 +459,6 @@ export default function CompaniesHideList() {
               </div>
             }
           />
-        </div>
-      )}
-
-      <Divider plain>or</Divider>
-
-      {/* Top 5 */}
-      {(loadingTop || filteredTop.length > 0) && (
-        <div className="mt-1">
-          <div className="text-sm font-semibold text-hidejobs-700 mb-1">
-            Top 5 Hidden Companies
-          </div>
-          {loadingTop ? (
-            <div className="rounded-md border border-gray-200 p-3">
-              <Skeleton active paragraph={{ rows: 2 }} />
-            </div>
-          ) : (
-            <ul className="rounded-md border border-gray-200 divide-y divide-gray-100">
-              {filteredTop.map((item) => (
-                <li
-                  key={item.companyName}
-                  className="flex items-center justify-between px-3 py-2"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-6 shrink-0 text-gray-400 text-xs">
-                      #{item.rank}
-                    </span>
-                    <span className="truncate">
-                      {item.companyName}{" "}
-                      <span className="text-gray-400 text-xs">
-                        ({item.hiddenByUsersCount})
-                      </span>
-                    </span>
-                  </div>
-                  <Button
-                    size="small"
-                    onClick={() => addOne(item.companyName)}
-                    disabled={!isSubscribed}
-                  >
-                    Add
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
     </div>

@@ -150,7 +150,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /* =========================================================================
    6) Internal messages (fetch top hidden companies)
    ========================================================================= */
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+   
+/*
+
+   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "get-top-hidden-companies") {
     fetch("https://appgettopfivehiddencompanies-2j2kwatdfq-uc.a.run.app", { method: "GET" })
       .then(async (res) => {
@@ -167,6 +170,67 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+*/
+
+/* =========================================================================
+   6.1) Internal messages (cloud save/load hidden companies)
+   ========================================================================= */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const CLOUD_URL = "https://appsaveandloadcompanieshidelist-2j2kwatdfq-uc.a.run.app";
+
+  // Save list to cloud
+  if (message?.type === "cloud-save-hidden-companies") {
+    (async () => {
+      try {
+        const { user } = await chrome.storage.local.get(["user"]);
+        const uid = user?.uid;
+        if (!uid) return sendResponse({ success: false, error: "No UID in extension storage" });
+
+        const list = Array.isArray(message?.payload?.list) ? message.payload.list : [];
+
+        const res = await fetch(CLOUD_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uid, hideList: list }),
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+
+        sendResponse({ success: true, data: json });
+      } catch (err) {
+        console.error("❌ cloud-save-hidden-companies failed:", err);
+        sendResponse({ success: false, error: err?.message || String(err) });
+      }
+    })();
+    return true; // keep channel open
+  }
+
+  // Load list from cloud
+  if (message?.type === "cloud-load-hidden-companies") {
+    (async () => {
+      try {
+        const { user } = await chrome.storage.local.get(["user"]);
+        const uid = user?.uid;
+        if (!uid) return sendResponse({ success: false, error: "No UID in extension storage" });
+
+        const url = `${CLOUD_URL}?uid=${encodeURIComponent(uid)}`;
+        const res = await fetch(url, { method: "GET", headers: { "Content-Type": "application/json" } });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+
+        sendResponse({ success: true, data: json });
+      } catch (err) {
+        console.error("❌ cloud-load-hidden-companies failed:", err);
+        sendResponse({ success: false, error: err?.message || String(err) });
+      }
+    })();
+    return true; // keep channel open
+  }
+});
+
 
 /* =========================================================================
    7) Internal messages (get/refresh subscription)
