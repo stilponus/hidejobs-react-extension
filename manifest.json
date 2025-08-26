@@ -45,15 +45,7 @@
         "https://*.linkedin.com/jobs/*"
       ],
       "js": [
-        "content-linkedin-scraper.js"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://*.linkedin.com/jobs/*"
-      ],
-      "js": [
+        "content-linkedin-scraper.js",
         "content-total-counter.js",
         "content-dismissed.js",
         "content-promoted.js",
