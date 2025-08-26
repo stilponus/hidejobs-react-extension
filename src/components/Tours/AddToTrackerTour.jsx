@@ -139,9 +139,8 @@ function findOpenSavedJobButton() {
   if (!root) return null;
   const candidates = Array.from(root.querySelectorAll("button,[role='button']"));
   return (
-    candidates.find(
-      (el) => (el.textContent || "").trim().toLowerCase() === "open saved job"
-    ) || null
+    candidates.find((el) => (el.textContent || "").trim().toLowerCase() === "open saved job") ||
+    null
   );
 }
 
@@ -155,13 +154,11 @@ function findSavedSummaryArea() {
   const openBtn = findOpenSavedJobButton();
 
   if (title && cats && openBtn) {
-    // Walk up from title to find a common ancestor that contains cats and openBtn
     let node = title;
     while (node && node !== root) {
       if (node.contains(cats) && node.contains(openBtn)) return node;
       node = node.parentElement;
     }
-    // Fallback to a reasonable container
     return root;
   }
   return null;
@@ -183,12 +180,10 @@ export default function AddToTrackerTour({ open, onClose }) {
     hidePanelInstant(chromeApi);
   }, [open, chromeApi]);
 
-  // Auto-advance on Status (step 4) and Interest (step 5)
   useEffect(() => {
     if (!open) return;
 
     const handler = (e) => {
-      // Step 4: Auto-advance when user selects dropdown option
       if (step === 4) {
         if (
           e.target.closest(".ant-select-item-option") ||
@@ -202,7 +197,6 @@ export default function AddToTrackerTour({ open, onClose }) {
         }
       }
 
-      // Step 5: Auto-advance when user clicks on star rating
       if (step === 5) {
         if (
           e.target.closest(".ant-rate-star") ||
@@ -227,7 +221,7 @@ export default function AddToTrackerTour({ open, onClose }) {
     };
   }, [open, step]);
 
-  // Step 7: After clicking Save, wait until it's saved (Saved state or "Open saved job" button), then go to step 8
+  // Step 7: watch save -> auto advance
   useEffect(() => {
     if (!open || step !== 7) return;
 
@@ -258,7 +252,6 @@ export default function AddToTrackerTour({ open, onClose }) {
     const onClick = (e) => {
       const saveEl = findSaveButtonBlock();
       if (saveEl && (e.target === saveEl || saveEl.contains(e.target))) {
-        // Start watching for saved state
         if (!pollId) pollId = setInterval(checkSaved, 200);
         if (!mo) {
           const root = getPanelShadowRoot() || document.body;
@@ -268,19 +261,33 @@ export default function AddToTrackerTour({ open, onClose }) {
       }
     };
 
+    // ✅ New: also listen for tour-triggered save
+    const onTourSave = () => {
+      console.log("🟠 Tour-triggered save → start watching for saved state");
+      if (!pollId) pollId = setInterval(checkSaved, 200);
+      if (!mo) {
+        const root = getPanelShadowRoot() || document.body;
+        mo = new MutationObserver(checkSaved);
+        mo.observe(root, { childList: true, subtree: true, characterData: true });
+      }
+      const saveBtn = findSaveButtonBlock();
+      if (saveBtn) saveBtn.click();
+    };
+
     document.addEventListener("click", onClick, true);
     const rootEl = getPanelShadowRoot();
     if (rootEl) rootEl.addEventListener("click", onClick, true);
+    window.addEventListener("hidejobs-tour-trigger-save", onTourSave);
 
     return () => {
       document.removeEventListener("click", onClick, true);
       if (rootEl) rootEl.removeEventListener("click", onClick, true);
+      window.removeEventListener("hidejobs-tour-trigger-save", onTourSave);
       if (pollId) clearInterval(pollId);
       if (mo) mo.disconnect();
     };
   }, [open, step]);
 
-  // Measure current step target
   useEffect(() => {
     if (!open) return;
     const measure = () => {
@@ -321,11 +328,8 @@ export default function AddToTrackerTour({ open, onClose }) {
     };
   }, [open, step]);
 
-  // Block interactions
   useEffect(() => {
     if (!open) return;
-
-    // Allow full interactions for Status dropdown (step 4)
     if (step === 4) return;
 
     const PADDING = 8;
@@ -349,7 +353,7 @@ export default function AddToTrackerTour({ open, onClose }) {
       return el.contains(ev.target);
     };
     const guard = (ev) => {
-      if (ev.target.closest(".ant-select-dropdown")) return; // allow dropdown portal
+      if (ev.target.closest(".ant-select-dropdown")) return;
       if (isInsideHole(ev) || isInsideBox(ev)) return;
       ev.preventDefault();
       ev.stopPropagation();
@@ -403,8 +407,11 @@ export default function AddToTrackerTour({ open, onClose }) {
   const handleNext = () => {
     if (step === 1) {
       showPanelInstant(chromeApi).then(() => setStep(2));
-    } else if (step < 8) {
+    } else if (step >= 2 && step <= 6) {
       setStep(step + 1);
+    } else if (step === 7) {
+      console.log("🟠 Tour NEXT pressed on step 7 → triggering save");
+      window.dispatchEvent(new Event("hidejobs-tour-trigger-save"));
     }
   };
 
@@ -415,10 +422,8 @@ export default function AddToTrackerTour({ open, onClose }) {
   const boxW = 328;
   const estBoxH = 170;
 
-  // Positioning
   let boxTop, boxLeft;
   if (step === 1 || step >= 4) {
-    // Force box to the LEFT for steps 1,4,5,6,7,8
     const preferLeft = hole.x - gap - boxW;
     const fitsLeft = preferLeft >= 12;
     boxLeft = fitsLeft ? preferLeft : 12;
@@ -449,10 +454,7 @@ export default function AddToTrackerTour({ open, onClose }) {
                   : "Great! Your job is saved. Here's where to find the title, captured details, and the Open saved job button.";
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }}
-      aria-hidden
-    >
+    <div style={{ position: "fixed", inset: 0, zIndex: 10050, pointerEvents: "none" }} aria-hidden>
       <style>{`.ant-tooltip,.ant-popover{display:none !important;}`}</style>
       <svg width="100%" height="100%" style={{ position: "fixed", inset: 0, display: "block" }}>
         <defs>

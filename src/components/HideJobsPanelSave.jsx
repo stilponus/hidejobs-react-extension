@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button, message } from "antd";
 import { PlusOutlined, CheckOutlined } from "@ant-design/icons";
 
@@ -76,14 +76,12 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
               console.log("✅ Saved job:", response.data);
               message.success("Job saved");
 
-              // Detect custom job correctly
               const cleanUrl = window.location.origin + window.location.pathname;
               const isCustomJob = !data.externalJobId || data.externalJobId === cleanUrl;
 
               let storageKey, storageData;
 
               if (isCustomJob) {
-                // Custom job: use clean URL and save title/company
                 storageKey = cleanUrl;
                 storageData = {
                   saved: true,
@@ -93,7 +91,6 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
                 };
                 console.log("🟢 SAVING CUSTOM JOB:", storageKey, storageData);
               } else {
-                // Scraped job: use externalJobId and save minimal data
                 storageKey = data.externalJobId;
                 storageData = {
                   saved: true,
@@ -131,6 +128,21 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
       }
     });
   };
+
+  // ✅ Listen for tour's "trigger save" event
+  useEffect(() => {
+    const listener = () => {
+      if (!isJobSaved && !loading && data && Object.keys(data).length > 0) {
+        console.log("🟠 Tour triggered save via global event");
+        handleSave();
+      } else {
+        console.warn("⚠️ Tour tried to trigger save, but job data not ready.");
+      }
+    };
+    window.addEventListener("hidejobs-tour-trigger-save", listener);
+    return () => window.removeEventListener("hidejobs-tour-trigger-save", listener);
+  }, [isJobSaved, loading, data]);
+
 
   return (
     <Button
