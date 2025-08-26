@@ -6,7 +6,7 @@ import { CloseOutlined } from "@ant-design/icons";
 function getChrome() {
   try {
     if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome;
-  } catch {}
+  } catch { }
   return null;
 }
 
@@ -48,7 +48,7 @@ function setPanelVisible(visible, { instant = false } = {}) {
       detail: { visible, instant },
     });
     window.dispatchEvent(evt);
-  } catch {}
+  } catch { }
 }
 
 function raf(fn) {
@@ -63,7 +63,7 @@ function showPanelInstant(chromeApi, view = "reposted") {
         try {
           const evt = new CustomEvent("hidejobs-panel-set-view", { detail: { view } });
           window.dispatchEvent(evt);
-        } catch {}
+        } catch { }
         raf(() => {
           setPanelVisible(true, { instant: true });
           raf(() => {
@@ -163,6 +163,18 @@ export default function RepostedJobsTour({ open, onClose }) {
     };
   }, [open, step]);
 
+  // Step 2 logic: advance to Step 3 if Scan is clicked
+  useEffect(() => {
+    if (!open || step !== 2) return;
+    const btn = findRepostedScanButton();
+    if (!btn) return;
+    const handler = () => {
+      hidePanelInstant(chromeApi).then(() => setStep(3));
+    };
+    btn.addEventListener("click", handler);
+    return () => btn.removeEventListener("click", handler);
+  }, [open, step, chromeApi]);
+
   // Measure target rect
   useEffect(() => {
     if (!open) return;
@@ -203,7 +215,6 @@ export default function RepostedJobsTour({ open, onClose }) {
 
   const handleNext = () => {
     if (step === 1) {
-      // On Next from Step 1: force ON, go to Step 2
       const sw = findRepostedSwitchEl();
       if (sw) {
         const isOn = (sw.getAttribute("aria-checked") || "").toLowerCase() === "true";
@@ -211,6 +222,8 @@ export default function RepostedJobsTour({ open, onClose }) {
       }
       setStep(2);
     } else if (step === 2) {
+      const btn = findRepostedScanButton();
+      if (btn) btn.click(); // simulate click
       hidePanelInstant(chromeApi).then(() => setStep(3));
     } else if (step === 3) {
       onClose?.();
@@ -247,8 +260,8 @@ export default function RepostedJobsTour({ open, onClose }) {
     step === 1
       ? "Turn ON the Reposted Jobs detector using this switch. Or click Next and I’ll turn it on for you."
       : step === 2
-      ? "Click Scan for Reposted Jobs. It will detect reposted listings and prepare controls."
-      : "Here’s your LinkedIn jobs list. Reposted items can be hidden for a cleaner view.";
+        ? "Click Scan for Reposted Jobs. Or click Next and I’ll scan for you automatically."
+        : "Here’s your LinkedIn jobs list. Reposted items can be hidden for a cleaner view.";
   const stepCount = 3;
 
   return (
@@ -300,13 +313,19 @@ export default function RepostedJobsTour({ open, onClose }) {
         </div>
         <div className="mt-1 text-sm text-gray-700">{stepText}</div>
         <div className="mt-3 flex items-end justify-between gap-2">
-          <div className="text-sm text-gray-600 leading-none">{step} / {stepCount}</div>
+          <div className="text-sm text-gray-600 leading-none">
+            {step} / {stepCount}
+          </div>
           <div className="flex items-end gap-2">
             {(step === 2 || step === 3) && <Button onClick={handlePrev}>Previous</Button>}
             {step === 3 ? (
-              <Button type="primary" onClick={onClose}>Finish</Button>
+              <Button type="primary" onClick={onClose}>
+                Finish
+              </Button>
             ) : (
-              <Button type="primary" onClick={handleNext}>Next</Button>
+              <Button type="primary" onClick={handleNext}>
+                Next
+              </Button>
             )}
           </div>
         </div>
