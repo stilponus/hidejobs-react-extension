@@ -3,7 +3,7 @@ import { Button } from "antd";
 
 const HideJobsPanelLoginRequired = () => {
   const handleLogin = () => {
-    chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/account" });
+    chrome.runtime.sendMessage({ type: "open-tab", url: "https://app.hidejobs.com/login" });
   };
 
   return (

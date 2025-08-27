@@ -1,4 +1,3 @@
-// src/components/CompaniesHideList.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Button, Input, message, Skeleton, Tooltip, Switch, Empty, Modal, Space } from "antd";
 import {
@@ -10,6 +9,7 @@ import {
 } from "@ant-design/icons";
 
 import SubscribeButton from "./SubscribeButton";
+import HideJobsPanelLoginRequired from "./HideJobsPanelLoginRequired";
 
 function getChrome() {
   try {
@@ -38,6 +38,8 @@ function detectSite() {
 }
 
 export default function CompaniesHideList() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
   const chromeApi = useMemo(getChrome, []);
   const [companies, setCompanies] = useState([]);
   const [newCompany, setNewCompany] = useState("");
@@ -81,6 +83,22 @@ export default function CompaniesHideList() {
     };
     chrome?.storage?.onChanged?.addListener(onChange);
     return () => chrome?.storage?.onChanged?.removeListener(onChange);
+  }, []);
+
+  // login status
+  useEffect(() => {
+    chrome?.storage?.local?.get(["user"], (res) => {
+      setIsLoggedIn(!!res?.user?.uid);
+    });
+
+    const onStore = (changes, area) => {
+      if (area !== "local") return;
+      if ("user" in changes) {
+        setIsLoggedIn(!!changes.user?.newValue?.uid);
+      }
+    };
+    chrome?.storage?.onChanged?.addListener(onStore);
+    return () => chrome?.storage?.onChanged?.removeListener(onStore);
   }, []);
 
   // subscription state + feature toggle load
@@ -325,6 +343,19 @@ export default function CompaniesHideList() {
       },
     });
   };
+
+  // If not logged in — show the login-required panel
+  if (!isLoggedIn) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        {contextHolder}
+        {modalContextHolder}
+        <div className="w-full max-w-md">
+          <HideJobsPanelLoginRequired />
+        </div>
+      </div>
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Show empty state with 3 buttons when NOT on a supported job page

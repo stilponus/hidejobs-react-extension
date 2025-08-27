@@ -1,5 +1,6 @@
+// src/components/HideJobsPanelShell.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { Button, Dropdown } from "antd";
+import { Button, Dropdown, Modal, message } from "antd";
 import {
   MenuOutlined,
   PlusSquareOutlined,
@@ -10,7 +11,9 @@ import {
   CloseOutlined,
   ArrowsAltOutlined,
   RetweetOutlined,
-  QuestionCircleFilled, // ← NEW
+  QuestionCircleFilled,
+  LogoutOutlined,
+  LoginOutlined,
 } from "@ant-design/icons";
 
 import LogoNoBackground from "../assets/LogoNoBackground";
@@ -28,6 +31,8 @@ import RepostedPanel from "./RepostedJobs/RepostedPanel";
 import HideJobsHelpPanel from "./HideJobsHelpPanel"; // ← NEW
 
 const HideJobsPanelShell = () => {
+  const [modal, modalContextHolder] = Modal.useModal();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [isButtonVisible, setIsButtonVisible] = useState(false);
@@ -259,6 +264,28 @@ const HideJobsPanelShell = () => {
     ? customJobHookResult
     : contentHookResult;
 
+  // ===== Logout handler (AntD Modal.confirm) =====
+  const requestLogout = () => {
+    modal.confirm({
+      title: "Log out?",
+      content: "You will be signed out of HideJobs on this browser.",
+      icon: null,
+      okText: "Log out",
+      okButtonProps: { danger: true, icon: <LogoutOutlined /> },
+      cancelText: "Cancel",
+      onOk: async () => {
+        try {
+          await chrome?.storage?.local?.remove("user");
+          setIsLoggedIn(false);
+          message.success("You have been logged out.");
+        } catch (e) {
+          message.error("Failed to log out. Please try again.");
+        }
+      },
+    });
+  };
+
+
   const dropdownItems = [
     {
       key: "job-panel",
@@ -362,10 +389,34 @@ const HideJobsPanelShell = () => {
         setDropdownOpen(false);
       },
     },
+    { type: "divider" },
+    isLoggedIn
+      ? {
+        key: "logout",
+        label: "Log out",
+        icon: <LogoutOutlined />,
+        onClick: () => {
+          setDropdownOpen(false);
+          requestLogout();
+        },
+      }
+      : {
+        key: "login",
+        label: "Log in",
+        icon: <LoginOutlined />,
+        onClick: () => {
+          setDropdownOpen(false);
+          chrome?.runtime?.sendMessage?.({
+            type: "open-tab",
+            url: "https://app.hidejobs.com/login",
+          });
+        },
+      }
   ];
 
   return (
     <>
+      {modalContextHolder}
       <style>
         {`
           .button-wrapper {
