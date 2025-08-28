@@ -150,7 +150,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /* =========================================================================
    6) Internal messages (fetch top hidden companies)
    ========================================================================= */
-   
+
 /*
 
    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -253,5 +253,94 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     })();
     return true; // keep channel open for async response
+  }
+});
+
+
+/* =========================================================================
+   8) Robust feature reset when logged out (single source of truth)
+   ========================================================================= */
+
+/**
+ * Reset ONLY filter toggles & badge visibility when logged out.
+ * Does NOT clear user, subscription, or other keys.
+ */
+/**
+ * Reset ONLY filter toggles & badge visibility when logged out.
+ * Does NOT clear the `user` object (that's handled by whoever called this),
+ * but it ensures all UI-visible switches are OFF and counters are zero.
+ */
+async function resetAllFeaturesForLoggedOutUser(reason = "unknown") {
+  try {
+    const updates = {
+      // per-feature toggles OFF
+      dismissedBadgeVisible: false, dismissedHidden: false,
+      promotedBadgeVisible: false, promotedHidden: false,
+      viewedBadgeVisible: false, viewedHidden: false,
+      appliedBadgeVisible: false, appliedHidden: false,
+      repostedGhostBadgeVisible: false, repostedGhostHidden: false,
+      indeedSponsoredBadgeVisible: false, indeedSponsoredHidden: false,
+      indeedAppliedBadgeVisible: false, indeedAppliedHidden: false,
+      glassdoorAppliedBadgeVisible: false, glassdoorAppliedHidden: false,
+      filterByHoursBadgeVisible: false, filterByHoursHidden: false,
+
+      // keywords
+      userTextBadgeVisible: false, userTextHidden: false, userText: "",
+      indeedUserTextBadgeVisible: false, indeedUserTextHidden: false,
+      glassdoorUserTextBadgeVisible: false, glassdoorUserTextHidden: false,
+
+      // companies
+      companiesBadgeVisible: false, companiesHidden: false,
+      indeedCompaniesBadgeVisible: false, indeedCompaniesHidden: false,
+      glassdoorCompaniesBadgeVisible: false, glassdoorCompaniesHidden: false,
+
+      // totals + counters
+      totalOnPageBadgeVisible: false,
+      totalHiddenOnPage: 0,        // existing counter you already use
+      totalOnPageHidden: false,        
+      companiesHiddenCount: 0,
+      keywordHiddenCount: 0,
+
+      // UI prefs
+      badgesCompact: false,
+
+      // subscription cache (logged-out baseline)
+      isSubscribed: false,
+      subscriptionStatus: "unknown",
+
+      // DO NOT set FEATURE_BADGE_KEY/HIDE_REPOSTED_STATE_KEY here unless using computed keys
+      // [HIDE_REPOSTED_STATE_KEY]: "false",  // only if constants are imported and used as storage keys
+      // [FEATURE_BADGE_KEY]: false,
+    };
+
+    await chrome.storage.local.set(updates);
+
+    // remove known typo/junk keys so they stop polluting storage (optional but tidy)
+    await chrome.storage.local.remove([
+      "repostedGhotstBadgeVisible" // old misspelling
+    ]);
+
+    // 👉 Tell all tabs to clear visible badges NOW
+    const tabs = await chrome.tabs.query({});
+    for (const t of tabs) {
+      chrome.tabs.sendMessage(t.id, { type: "HJ_FORCE_FEATURES_OFF", reason }, () => {
+        void chrome.runtime.lastError; // swallow "no receiver" errors
+      });
+    }
+
+    console.log("🧹 Filter toggles + badges reset to OFF. Reason:", reason);
+  } catch (err) {
+    console.error("💥 resetAllFeaturesForLoggedOutUser failed:", err);
+  }
+}
+
+
+// Only reset when user is explicitly removed/falsy
+chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area !== "local" || !("user" in changes)) return;
+  const next = changes.user?.newValue;
+  const hasUid = !!next?.uid;
+  if (!hasUid) {
+    await resetAllFeaturesForLoggedOutUser("storage_user_removed");
   }
 });

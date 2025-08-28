@@ -404,6 +404,112 @@ export default function RepostedPanel() {
     });
   };
 
+  // ---------------- Collapse content ----------------
+  const collapseItems = [
+    {
+      key: "reposted-list",
+      label: `Reposted jobs (${details.length})`,
+      extra: (
+        <Tooltip title="Clear all reposted jobs">
+          <Button type="text" size="small" icon={<DeleteOutlined />} onClick={handleClearAll} />
+        </Tooltip>
+      ),
+      children: (
+        <div className={`${isSubscribed ? "max-h-80" : "max-h-57"} overflow-auto`}>
+          <List
+            size="small"
+            dataSource={details}
+            renderItem={(item) => {
+              const isHiddenCompany = hiddenCompanies.some(
+                (c) => (c || "").toLowerCase() === (item.companyName || "").toLowerCase()
+              );
+              return (
+                <List.Item>
+                  <div className="w-full flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium leading-tight truncate">
+                        {item.jobTitle || "Untitled role"}
+                      </div>
+                      <div className="text-gray-600 text-xs leading-tight truncate">
+                        {item.companyName || "—"}
+                      </div>
+                    </div>
+                    <div className="flex items-center flex-shrink-0">
+                      {isHiddenCompany ? (
+                        <Tooltip title="Company saved to hidden list">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<CheckSquareOutlined style={{ color: "#16a34a" }} />}
+                            className="ml-2"
+                          />
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title="Add this company to hidden list">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<PlusSquareOutlined />}
+                            onClick={(e) => handleHideCompany(item.companyName, e)}
+                            className="ml-2 text-gray-400 hover:text-blue-600"
+                          />
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Remove this job">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<CloseOutlined />}
+                          onClick={(e) => handleDeleteJob(item.id, e)}
+                          className="ml-2 text-gray-400 hover:text-hidejobs-red-500"
+                        />
+                      </Tooltip>
+                    </div>
+                  </div>
+                </List.Item>
+              );
+            }}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  // ---------------- Feature toggle handler (updated with abort functionality) ----------------
+  const onFeatureToggle = (checked) => {
+    // If turning off while scanning, abort the scan first
+    if (!checked && scanning) {
+      onAbort();
+    }
+
+    setFeatureOn(checked);
+    if (!checked) {
+      chrome?.storage?.local?.set({
+        [FEATURE_BADGE_KEY]: false,
+        [HIDE_REPOSTED_STATE_KEY]: "false",
+      });
+      toggleHideShowReposted(false);
+      removeBadgesAndUnhideNow();
+
+      // 👇 only show message if tour is not open
+      if (!repostedTourOpen) {
+        messageApi.info("Reposted Jobs detection disabled.");
+      }
+    } else {
+      chrome?.storage?.local?.set({ [FEATURE_BADGE_KEY]: true });
+      applyOverlaysFromLocalStorage();
+      chrome?.storage?.local?.get([HIDE_REPOSTED_STATE_KEY], (res) => {
+        const hideNow = res?.[HIDE_REPOSTED_STATE_KEY] === "true";
+        toggleHideShowReposted(hideNow);
+      });
+
+      // 👇 only show message if tour is not open
+      if (!repostedTourOpen) {
+        messageApi.success("Reposted Jobs detection enabled.");
+      }
+    }
+  };
+
   // ---------------- If NOT logged in, show login-required panel (centered) ----------------
   if (!isLoggedIn) {
     return (
@@ -587,8 +693,8 @@ export default function RepostedPanel() {
         scanning={scanning}
         scanCompleted={firstScanDone}
         onAbort={onAbort}
-        progress={progress}
-        foundThisScan={foundThisScan}
+        progress={progress}  // ← Add this new prop
+        foundThisScan={foundThisScan}  // ← Add this new prop
       />
     </div>
   );

@@ -414,5 +414,20 @@ function clearRepostedBadgesFromDOM() {
       sendResponse?.({ received: true });
       return true;
     }
+
+    // 🔴 New: hard reset trigger from background
+    if (message?.type === "HJ_FORCE_FEATURES_OFF") {
+      console.log("🧹 Content script received HJ_FORCE_FEATURES_OFF");
+
+      try { clearRepostedBadgesFromDOM(); } catch { }
+
+      // TODO: extend here if you have functions that draw dismissed/promoted/viewed
+      // e.g. remove all .my-dismissed-badge / .my-promoted-badge / .my-viewed-badge etc.
+      document.querySelectorAll(".my-dismissed-badge, .my-promoted-badge, .my-viewed-badge")
+        .forEach(el => el.remove());
+
+      sendResponse?.({ received: true });
+      return true;
+    }
   });
 })();

@@ -5,7 +5,7 @@ export const REPOSTED_JOBS_DETAILS_KEY = "myRepostedJobsDetails"; // [{id, jobTi
 export const HIDE_REPOSTED_STATE_KEY = "myHideRepostedActive";
 
 // NOTE: keep this exact key in sync everywhere (Filters, inject, hooks)
-export const FEATURE_BADGE_KEY = "repostedGhtostBadgeVisible";
+export const FEATURE_BADGE_KEY = "repostedGhostBadgeVisible";
 export const ALERT_DISMISSED_KEY = "repostedPanelAlertDismissed";
 
 export function isSupportedHost() {
