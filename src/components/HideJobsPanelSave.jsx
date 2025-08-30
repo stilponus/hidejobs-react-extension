@@ -41,6 +41,7 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
           comp_currency: data.comp_currency || "",
           comp_min_salary: data.comp_min_salary || "",
           comp_max_salary: data.comp_max_salary || "",
+          comp_pay_period: data.comp_pay_period || "",
           job_status: jobStatuses.find((s) => s.key === status)?.label || "",
           job_posted_at: data.job_posted_at || "",
           platform: data.platform || "",

@@ -31,13 +31,20 @@
   const parseSalaryRange = (text) => {
     if (!text) {
       log("No salary text present; skipping range parse.");
-      return { comp_min_salary: null, comp_max_salary: null, comp_currency: null };
+      return { comp_min_salary: null, comp_max_salary: null, comp_currency: null, comp_pay_period: null };
     }
     const t = text.replace(/\u2013|\u2014|–|—/g, "-"); // normalize dashes
     let currency = null;
     if (/[€]/.test(t)) currency = "EUR";
     else if (/[£]/.test(t)) currency = "GBP";
     else if (/[$]/.test(t)) currency = "USD";
+
+    // Extract pay period
+    let payPeriod = null;
+    if (/\/yr\b|\/year\b|per\s+year/i.test(t)) payPeriod = "year";
+    else if (/\/hr\b|\/hour\b|per\s+hour/i.test(t)) payPeriod = "hour";
+    else if (/\/mth\b|\/month\b|per\s+month/i.test(t)) payPeriod = "month";
+    else if (/\/wk\b|\/week\b|per\s+week/i.test(t)) payPeriod = "week";
 
     const toNumber = (chunk) => {
       if (!chunk) return null;
@@ -59,8 +66,8 @@
     }
     if (min && max && min > max) [min, max] = [max, min];
 
-    log("Parsed salary:", { input: text, min, max, currency });
-    return { comp_min_salary: min, comp_max_salary: max, comp_currency: currency };
+    log("Parsed salary:", { input: text, min, max, currency, payPeriod });
+    return { comp_min_salary: min, comp_max_salary: max, comp_currency: currency, comp_pay_period: payPeriod };
   };
 
   const getTopCard = () =>
@@ -197,7 +204,7 @@
     const job_location = getLocation();
     const job_posted_ago = getPostedAgo();
     const salaryText = getSalaryText();
-    const { comp_min_salary, comp_max_salary, comp_currency } = parseSalaryRange(salaryText);
+    const { comp_min_salary, comp_max_salary, comp_currency, comp_pay_period } = parseSalaryRange(salaryText);
     const job_description = getJobDescriptionHTML();
     const externalJobId = getExternalJobId();
     const work_format = getWorkFormat();
@@ -211,6 +218,7 @@
     add("comp_min_salary", comp_min_salary);
     add("comp_max_salary", comp_max_salary);
     add("comp_currency", comp_currency);
+    add("comp_pay_period", comp_pay_period);
     add("job_description", job_description);
     add("externalJobId", externalJobId);
     add("job_url", getCanonicalLinkedInUrl()); // canonical, no trailing slash
