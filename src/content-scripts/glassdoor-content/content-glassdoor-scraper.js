@@ -17,6 +17,9 @@
     readyObserver: null,    // observer waiting for job content
     urlObserver: null,      // observer watching for URL changes via DOM updates
     urlInterval: null,      // interval fallback for URL checks
+    // NEW: observe in-panel job switches on /Job/index.htm (no navigation)
+    jobObserver: null,
+    lastJobId: null,
   };
 
   // === Utils ===
@@ -59,7 +62,6 @@
       return parseInt(raw.replace(/[^\d]/g, ""), 10) || null;
     };
 
-    // Split range
     const parts = t.split(/\s*-\s*/);
     let min = null;
     let max = null;
@@ -140,29 +142,41 @@
   // Job description HTML
   // Prefer the description section with a stable brandviews marker, no brittle classnames.
   const getJobDescriptionHTML = () => {
-    // Section that wraps the job description block
-    const section = document.querySelector('section [data-brandviews*="joblisting-description"]')?.parentElement
-      || document.querySelector('[data-brandviews*="joblisting-description"]');
+    // 1) Prefer the stable brandviews container when present
+    const moduleOrSection =
+      document.querySelector('section [data-brandviews*="joblisting-description"]')?.parentElement ||
+      document.querySelector('[data-brandviews*="joblisting-description"]');
 
-    if (section) {
-      // Take the biggest inner HTML portion (prioritize a DIV inside the section)
-      // Avoid relying on class names; grab the first descendant DIV with a lot of text.
-      const candidates = Array.from(section.querySelectorAll("div, article, section"));
+    if (moduleOrSection) {
+      const candidates = Array.from(moduleOrSection.querySelectorAll("div, article, section"));
       let best = null;
       let bestLen = 0;
-      candidates.forEach((el) => {
+      for (const el of candidates) {
         const len = (el.innerText || "").length;
         if (len > bestLen) {
           best = el;
           bestLen = len;
         }
-      });
+      }
       if (best) return best.innerHTML;
-      return section.innerHTML;
+      return moduleOrSection.innerHTML;
     }
 
-    // Fallbacks often used across GD builds
-    const byId = getEl("#job-details"); // occasionally present
+    // 2) Your requested selector (hashed classes) — used as a fallback.
+    // Use starts-with to tolerate the hash suffix (e.g., JobDetails_jobDescription__uW_fK).
+    const byHashedPrefix =
+      document.querySelector('div[class^="JobDetails_jobDescription__"]') ||
+      document.querySelector('div[class*=" JobDetails_jobDescription__"]');
+    if (byHashedPrefix) return byHashedPrefix.innerHTML;
+
+    // 3) If Glassdoor exposes the "showHidden" variant, accept it too (also hashed).
+    const byShowHidden =
+      document.querySelector('div[class^="JobDetails_showHidden__"]') ||
+      document.querySelector('div[class*=" JobDetails_showHidden__"]');
+    if (byShowHidden) return byShowHidden.innerHTML;
+
+    // 4) Legacy fallback some builds expose
+    const byId = document.querySelector("#job-details");
     if (byId) return byId.innerHTML;
 
     return null;
@@ -253,7 +267,7 @@
     const externalJobId = getExternalJobId();
     const work_format = getWorkFormat();
     const employment_type = getEmploymentType();
-    const key_skills = getKeySkills();
+    const job_required_skills = getKeySkills();
 
     add("job_title", job_title);
     add("company_name", company_name);
@@ -269,7 +283,10 @@
     add("platform", "Glassdoor");
     add("employment_type", employment_type);
     add("work_format", work_format);
-    add("key_skills", key_skills);
+    add("job_required_skills", job_required_skills);
+
+    // NEW: remember last job id so we can detect in-panel switches and avoid skeleton loops
+    if (externalJobId) STATE.lastJobId = externalJobId;
 
     if (DEBUG) log("Built payload (pre-flight):", JSON.parse(JSON.stringify(payload)));
     return payload;
@@ -417,9 +434,37 @@
     log("URL change detection initialized (no debounce).");
   };
 
+  // === Job panel observer (detect job changes inside /Job/index.htm) ===
+  const setupJobPanelObserver = () => {
+    try {
+      if (STATE.jobObserver) STATE.jobObserver.disconnect();
+
+      STATE.jobObserver = new MutationObserver(() => {
+        // When user clicks a different job in the left list, Glassdoor swaps the panel
+        const newId = getExternalJobId();
+        if (newId && newId !== STATE.lastJobId) {
+          log("Detected in-panel job change:", newId, "(was:", STATE.lastJobId, ")");
+          // Show skeleton, then re-run the normal ready→extract flow
+          sendLoading();
+          clearCurrentRun();
+          STATE.runId += 1;
+          STATE.lastJobId = newId;
+          startWhenReady(STATE.runId);
+        }
+      });
+
+      // The job panel is injected anywhere under <body>, so watch the full subtree
+      STATE.jobObserver.observe(document.body, { childList: true, subtree: true });
+      if (DEBUG) log("Job panel observer attached.");
+    } catch (e) {
+      error("Failed to attach job panel observer:", e);
+    }
+  };
+
   // === Initial boot ===
   const boot = () => {
     setupUrlChangeDetection();
+    setupJobPanelObserver(); // NEW: handle in-panel job switches on /Job/index.htm
     sendLoading();
     STATE.lastUrl = window.location.href;
     STATE.runId += 1;
