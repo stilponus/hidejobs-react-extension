@@ -26,6 +26,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
   const [status, setStatus] = useState("bookmarked");
   const [rating, setRating] = useState(0);
   const [notes, setNotes] = useState("");
+  const [showRefreshFallback, setShowRefreshFallback] = useState(false);
 
   const [openTour, setOpenTour] = useState(false);
 
@@ -51,12 +52,19 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
         setRating(0);
         setNotes("");
         setTrackedJobId(null);
+        setShowRefreshFallback(false);
+
+        // Show refresh fallback after 2 seconds
+        setTimeout(() => {
+          setShowRefreshFallback(true);
+        }, 2000);
         return;
       }
 
       if (msg.type === "hidejobs-job-data" && msg.payload) {
         console.log("🟡 Job data received:", msg.payload);
         setData(msg.payload);
+        setShowRefreshFallback(false); // Hide fallback when data arrives
       }
     };
 
@@ -92,25 +100,27 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
     content: !data ? (
       <div className="space-y-3">
         <Skeleton active />
-        <div className="flex flex-col items-center justify-center text-center space-y-2 py-2">
-          <p className="text-gray-700 text-sm">
-            If details don’t appear, try refreshing the page.
-          </p>
-          <Button
-            type="primary"
-            size="large"
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              try {
-                location.reload();
-              } catch {
-                // no-op fallback, just in case
-              }
-            }}
-          >
-            Refresh page
-          </Button>
-        </div>
+        {showRefreshFallback && (
+          <div className="flex flex-col items-center justify-center text-center space-y-2 py-2">
+            <p className="text-gray-700 text-sm">
+              If details don't appear, try refreshing the page.
+            </p>
+            <Button
+              type="primary"
+              size="large"
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                try {
+                  location.reload();
+                } catch {
+                  // no-op fallback, just in case
+                }
+              }}
+            >
+              Refresh page
+            </Button>
+          </div>
+        )}
       </div>
     ) : (
       <div className="space-y-4">
