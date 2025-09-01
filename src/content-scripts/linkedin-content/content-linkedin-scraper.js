@@ -296,6 +296,19 @@
     return false;
   };
 
+  // === Manual refresh handler ===
+  const handleRefreshCommand = () => {
+    log("Manual refresh command received");
+
+    // Send loading state immediately
+    sendLoading();
+
+    // Clear current run and restart
+    clearCurrentRun();
+    STATE.runId += 1;
+    startWhenReady(STATE.runId);
+  };
+
   // === URL Change trigger (NO DEBOUNCE. IMMEDIATE.) ===
   const triggerRescrapeNow = (reason = "unknown", nextHref = null) => {
     const href = nextHref || window.location.href;
@@ -377,6 +390,13 @@
 
   // === Initial boot ===
   const boot = () => {
+    // Listen for refresh commands from panel
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'hidejobs-refresh-parsing') {
+        handleRefreshCommand();
+      }
+    });
+
     setupUrlChangeDetection();
     sendLoading();
     STATE.lastUrl = window.location.href;

@@ -38,6 +38,11 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
     { key: "negotiating", label: "Negotiating" },
   ];
 
+  // Handle manual refresh
+  const handleRefreshParsing = () => {
+    window.postMessage({ type: 'hidejobs-refresh-parsing' }, '*');
+  };
+
   // Receive messages from the scraper
   useEffect(() => {
     const handleMessage = (e) => {
@@ -124,20 +129,31 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
       </div>
     ) : (
       <div className="space-y-4">
-        {/* Header with title + help button */}
-        <div className="flex items-center gap-1">
-          <h2 className="text-lg font-semibold text-hidejobs-700 mb-0">Add to Tracker</h2>
-          {!isJobSaved && (
-            <Tooltip title="How it works">
-              <Button
-                type="text"
-                size="small"
-                icon={<QuestionCircleFilled className="text-gray-400" />}
-                onClick={() => setOpenTour(true)}
-                aria-label="How it works"
-              />
-            </Tooltip>
-          )}
+        {/* Header with title + buttons */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <h2 className="text-lg font-semibold text-hidejobs-700 mb-0">Add to Tracker</h2>
+            {!isJobSaved && (
+              <Tooltip title="How it works">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<QuestionCircleFilled className="text-gray-400" />}
+                  onClick={() => setOpenTour(true)}
+                  aria-label="How it works"
+                />
+              </Tooltip>
+            )}
+          </div>
+          <Tooltip title="Refresh parsing">
+            <Button
+              type="text"
+              size="small"
+              icon={<ReloadOutlined className="text-gray-400" />}
+              onClick={handleRefreshParsing}
+              aria-label="Refresh parsing"
+            />
+          </Tooltip>
         </div>
 
         {/* Title and company */}
