@@ -227,7 +227,7 @@ const HideJobsPanelShell = ({ currentHref }) => {
 
     // Indeed: any subdomain + any TLD, common job URLs: /viewjob, /jobs
     const isIndeed =
-      /\/\/(?:[a-z0-9-]+\.)?indeed\.[a-z.]+\/(viewjob|jobs)\b/i.test(hrefFromProp);
+      /\/\/(?:[a-z0-9-]+\.)?indeed\.[a-z.]+(?:[/:?#]|$)/i.test(hrefFromProp);
 
     // Glassdoor: any subdomain + any TLD, common job URLs: /Job, /JobSearch
     const isGlassdoor =

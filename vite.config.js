@@ -44,6 +44,7 @@ export default defineConfig({
         "content-hours-patch": path.resolve(__dirname, "src/content-scripts/linkedin-content/content-hours-patch.js"),
         "content-companies": path.resolve(__dirname, "src/content-scripts/linkedin-content/content-companies.js"),
 
+        "content-indeed-scraper": path.resolve(__dirname, "src/content-scripts/indeed-content/content-indeed-scraper.js"),
         "content-applied-indeed": path.resolve(__dirname, "src/content-scripts/indeed-content/content-applied-indeed.js"),
         "content-sponsored-indeed": path.resolve(__dirname, "src/content-scripts/indeed-content/content-sponsored-indeed.js"),
         "content-companies-indeed": path.resolve(__dirname, "src/content-scripts/indeed-content/content-companies-indeed.js"),

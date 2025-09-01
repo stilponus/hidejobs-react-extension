@@ -108,6 +108,7 @@
         "https://*.indeed.com.vn/*"
       ],
       "js": [
+        "content-indeed-scraper.js",
         "inject-shadow-ui.js",
         "content-total-counter-indeed.js",
         "content-applied-indeed.js",
