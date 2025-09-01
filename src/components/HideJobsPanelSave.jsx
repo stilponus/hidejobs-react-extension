@@ -5,14 +5,31 @@ import { PlusOutlined, CheckOutlined } from "@ant-design/icons";
 const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved, setIsJobSaved, setTrackedJobId }) => {
   const [loading, setLoading] = useState(false);
 
+  // Function to transform skills array to the required job_keywords_json format
+  const transformSkillsToKeywordsJson = (skills) => {
+    if (!Array.isArray(skills) || skills.length === 0) return undefined;
+
+    const job_required_skills = skills.map((skill) => ({
+      canonical: normalizeSkill(skill),
+      verbatim: [String(skill)],
+      count: 1,
+    }));
+
+    return { job_required_skills };
+  };
+
+  // Example of a simple normalizer (expand as needed)
+  const normalizeSkill = (text) =>
+    String(text || "").trim().toLowerCase().replace(/\s+experience$/, "");
+
   const handleSave = async () => {
     console.log("🔵 Save button clicked");
-    console.log("🔍 jobContent (full):", data);
-    console.log("🔍 jobStatus:", status);
-    console.log("🔍 rating:", rating);
-    console.log("🔍 notes:", notes);
-    console.log("🔍 Current URL:", window.location.href);
-    console.log("🔍 Clean URL:", window.location.origin + window.location.pathname);
+    console.log("📋 jobContent (full):", data);
+    console.log("📋 jobStatus:", status);
+    console.log("📋 rating:", rating);
+    console.log("📋 notes:", notes);
+    console.log("📋 Current URL:", window.location.href);
+    console.log("📋 Clean URL:", window.location.origin + window.location.pathname);
 
     if (!data || Object.keys(data).length === 0) {
       message.error("No job data available to save");
@@ -49,9 +66,8 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
           work_format: data.work_format || "",
           employment_type: data.employment_type || "",
           job_notes: notes || "",
-          job_required_skills: Array.isArray(data.job_required_skills)
-            ? JSON.stringify(data.job_required_skills)
-            : data.job_required_skills || "",
+          // 🔧 FIXED: Transform skills to job_keywords_json format
+          job_keywords_json: transformSkillsToKeywordsJson(data.job_required_skills),
         },
       };
 
