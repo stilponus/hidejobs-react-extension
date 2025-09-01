@@ -313,7 +313,7 @@ function clearRepostedBadgesFromDOM() {
           }}
         >
           {/* Main side panel */}
-          <HideJobsPanelShell />
+          <HideJobsPanelShell currentHref={href} />
 
           {/* Badge stack: LinkedIn OR Indeed (unchanged) */}
           {shouldShowBadges && <BadgesHost />}

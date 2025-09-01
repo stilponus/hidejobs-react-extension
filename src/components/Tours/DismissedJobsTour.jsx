@@ -1,4 +1,4 @@
-// src/components/Tours/InteractiveTour.jsx
+// src/components/Tours/DismissedJobsTour.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
@@ -15,19 +15,17 @@ function getPanelShadowRoot() {
   return host?.shadowRoot || null;
 }
 
-/** STEP 1 target: the "Promoted" row (label + switch) inside Filters panel */
-function findPromotedRow() {
+/** STEP 1 target: the "Dismissed" row (label + switch) inside Filters panel */
+function findDismissedRow() {
   const root = getPanelShadowRoot();
   if (!root) return null;
 
-  // Prefer explicit data attribute if your row is marked this way
-  const attrTarget = root.querySelector('[data-filter-row="promoted"]');
+  const attrTarget = root.querySelector('[data-filter-row="dismissed"]');
   if (attrTarget) return attrTarget;
 
-  // Fallback: search by text and climb up to the container with the switch
   const nodes = Array.from(root.querySelectorAll("span, div, p, h2, h3"));
   const labelNode = nodes.find(
-    (el) => (el.textContent || "").trim().toLowerCase() === "promoted"
+    (el) => (el.textContent || "").trim().toLowerCase() === "dismissed"
   );
   if (!labelNode) return null;
 
@@ -39,22 +37,20 @@ function findPromotedRow() {
   return null;
 }
 
-/** STEP 2 target: the Promoted badge (right stack) */
-function findPromotedBadge() {
+/** STEP 2 target: the Dismissed badge (right stack) */
+function findDismissedBadge() {
   const root = getPanelShadowRoot();
   if (!root) return null;
 
-  // Prefer explicit attribute if available
-  const byAttr = root.querySelector('[data-badge="promoted"]');
+  const byAttr = root.querySelector('[data-badge="dismissed"]');
   if (byAttr) return byAttr;
 
-  // Fallbacks: aria-label or text search
-  const byAria = root.querySelector('[aria-label^="Promoted"]');
+  const byAria = root.querySelector('[aria-label^="Dismissed"]');
   if (byAria) return byAria;
 
   const candidates = Array.from(root.querySelectorAll("button, [role='button']"));
   const byText = candidates.find((el) =>
-    ((el.textContent || "").trim().toLowerCase()).includes("promoted")
+    ((el.textContent || "").trim().toLowerCase()).includes("dismissed")
   );
   if (byText) return byText;
 
@@ -121,7 +117,7 @@ function hidePanelInstant(chromeApi) {
   });
 }
 
-export default function InteractiveTour({ open, onClose }) {
+export default function DismissedJobsTour({ open, onClose }) {
   const chromeApi = useMemo(getChrome, []);
   const [rect, setRect] = useState(null);
   const [step, setStep] = useState(1);
@@ -139,36 +135,36 @@ export default function InteractiveTour({ open, onClose }) {
     showPanelInstant(chromeApi, "filters");
   }, [open, chromeApi]);
 
-  // ✅ STEP 1: reset only the Promoted toggle and compact once per entry into step 1
+  // ✅ STEP 1: reset only the Dismissed toggle and compact once per entry into step 1
   useEffect(() => {
     if (!open || !chromeApi) return;
     if (step !== 1) return;
 
     const toSet = {
       badgesCompact: false,
-      promotedHidden: false,
-      promotedBadgeVisible: false,
+      dismissedHidden: false,
+      dismissedBadgeVisible: false,
     };
 
     chromeApi.storage.local.set(toSet, () => {
       try {
-        const detail = { promoted: false, badgesCompact: false };
+        const detail = { dismissed: false, badgesCompact: false };
         window.dispatchEvent(new CustomEvent("hidejobs-filters-changed", { detail }));
       } catch { }
     });
   }, [open, step, chromeApi]);
 
-  // If user turns Promoted ON during Step 1 → go to Step 2 & close panel instantly
+  // If user turns Dismissed ON during Step 1 → go to Step 2 & close panel instantly
   useEffect(() => {
     if (!open || !chromeApi) return;
 
     const onChange = (changes, area) => {
       if (area !== "local") return;
 
-      if (step === 1 && ("promotedHidden" in changes || "promotedBadgeVisible" in changes)) {
-        const hv = "promotedHidden" in changes ? !!changes.promotedHidden.newValue : null;
+      if (step === 1 && ("dismissedHidden" in changes || "dismissedBadgeVisible" in changes)) {
+        const hv = "dismissedHidden" in changes ? !!changes.dismissedHidden.newValue : null;
         const bv =
-          "promotedBadgeVisible" in changes ? !!changes.promotedBadgeVisible.newValue : null;
+          "dismissedBadgeVisible" in changes ? !!changes.dismissedBadgeVisible.newValue : null;
         const nowOn = hv === true || bv === true;
         if (nowOn) {
           setStep(2);
@@ -187,9 +183,9 @@ export default function InteractiveTour({ open, onClose }) {
 
     const measure = () => {
       let el = null;
-      if (step === 1) el = findPromotedRow();
-      else if (step === 2) el = findPromotedBadge();
-      else if (step === 3) el = findJobListSection();
+      if (step === 1) el = findDismissedRow();
+      else if (step === 2) el = findJobListSection();
+      else if (step === 3) el = findDismissedBadge();
 
       if (!el) {
         setRect(null);
@@ -299,7 +295,7 @@ export default function InteractiveTour({ open, onClose }) {
   // Buttons
   const handlePrev = () => {
     if (step === 2) {
-      // Back to Step 1: reopen panel instantly; Step-1 effect will reset promoted + compact
+      // Back to Step 1: reopen panel instantly; Step-1 effect will reset dismissed + compact
       showPanelInstant(chromeApi, "filters").then(() => setStep(1));
     } else if (step === 3) {
       setStep(2);
@@ -310,8 +306,8 @@ export default function InteractiveTour({ open, onClose }) {
     if (step === 1) {
       chromeApi?.storage?.local?.set(
         {
-          promotedHidden: true,
-          promotedBadgeVisible: true,
+          dismissedHidden: true,
+          dismissedBadgeVisible: true,
           hidejobs_panel_visible: false,
         },
         () => {
@@ -333,7 +329,7 @@ export default function InteractiveTour({ open, onClose }) {
 
   // Positioning for instruction box
   let boxTop, boxLeft;
-  if (step === 3) {
+  if (step === 2) {
     // Prefer RIGHT of the highlighted area
     const preferRight = hole.x + hole.w + gap;
     const fitsRight = preferRight + boxW + 12 <= window.innerWidth;
@@ -347,24 +343,39 @@ export default function InteractiveTour({ open, onClose }) {
   }
 
   const stepTitle = step === 1 ? "Step 1" : step === 2 ? "Step 2" : "Step 3";
+
   const stepText =
     step === 1 ? (
-      "To start hiding jobs from your search results, turn ON any filter you want to use—it will hide matching jobs immediately. For this tour, we’ll use the Promoted filter as an example. Toggle it on now or click Next to continue."
+      "To start hiding jobs from your search results, turn ON any filter you want to use—it will hide matching jobs immediately. Here's the Dismissed filter as an example—toggle it on now or click Next to continue."
     ) : step === 2 ? (
-      "When you turn a filter ON, a badge for that filter appears here as your quick control. It shows how many jobs are currently hidden and lets you toggle the filter on/off without losing your settings."
-    ) : (
       <div className="space-y-2">
         <div>
-          When filters are active, matching job cards will be hidden from this
-          list, keeping your search results clean and focused on relevant
-          opportunities.
+          Click the{" "}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              verticalAlign: "middle",
+              lineHeight: 1,
+            }}
+          >
+            <CloseOutlined style={{ fontSize: "16px", marginBottom: "2px"}} />
+          </span>{" "}
+          button in the top-right of a job card to dismiss it. LinkedIn then shows{" "}
+          <span style={{ color: "#01754f", fontSize: "18px", fontWeight: 600 }}>
+            “We won’t show you this job again.”
+          </span>{" "}
+            However, LinkedIn continues showing these dismissed jobs, cluttering your results.
         </div>
+
         <div>
-          <strong className="text-hidejobs-red-700 font-semibold">Important:</strong> if you use
-          the Promoted filter, many or even all jobs on a page may be
-          promoted—so they could disappear instantly.
+          HideJobs fixes this: it waits a moment so you can restore the job, then
+          hides it automatically when you move to the next card—keeping your results
+          clean.
         </div>
       </div>
+    ) : (
+      "When the Dismissed filter is ON, a badge appears here showing how many jobs were hidden. You can use it to quickly toggle dismissed jobs on or off without losing your settings."
     );
 
   return (

@@ -155,7 +155,7 @@
     btn.textContent = 'Mark as Applied';
     Object.assign(btn.style, {
       padding: '4px 6px', border: 'none', borderRadius: '4px',
-      background: '#e6f3ff', color: '#0a66c2', cursor: 'pointer',
+      background: '#e6f3ff', color: '#28507c', cursor: 'pointer',
       fontSize: '11px', lineHeight: '1', transition: 'all .3s',
       position: 'absolute', bottom: '15px', right: '15px',
       zIndex: '0', outline: 'none'
@@ -171,7 +171,7 @@
     const unmark = () => {
       btn.classList.remove('indeed-applied-active');
       btn.style.background = '#e6f3ff';
-      btn.style.color = '#0a66c2';
+      btn.style.color = '#28507c';
       btn.textContent = 'Mark as Applied';
       card.classList.remove('hidejobs-applied-mark');
     };
@@ -180,13 +180,13 @@
 
     btn.addEventListener('mouseenter', () => {
       const a = btn.classList.contains('indeed-applied-active');
-      btn.style.background = a ? '#f8e3a1' : '#0a66c2';
+      btn.style.background = a ? '#f8e3a1' : '#28507c';
       btn.style.color = a ? '#00000099' : '#fff';
     });
     btn.addEventListener('mouseleave', () => {
       const a = btn.classList.contains('indeed-applied-active');
       btn.style.background = a ? '#e7a33e' : '#e6f3ff';
-      btn.style.color = a ? '#fff' : '#0a66c2';
+      btn.style.color = a ? '#fff' : '#28507c';
     });
 
     btn.addEventListener('click', () => {

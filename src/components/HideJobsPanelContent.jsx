@@ -1,6 +1,7 @@
+// src/components/HideJobsPanelContent.jsx
 import React, { useEffect, useState } from "react";
 import { Select, Rate, Input, Button, Skeleton, Tooltip } from "antd";
-import { CheckCircleOutlined, CloseCircleOutlined, QuestionCircleFilled } from "@ant-design/icons";
+import { CheckCircleOutlined, CloseCircleOutlined, QuestionCircleFilled, ReloadOutlined } from "@ant-design/icons";
 import AddToTrackerTour from "./Tours/AddToTrackerTour";
 
 const { Option } = Select;
@@ -43,6 +44,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
       if (!msg || typeof msg !== "object") return;
 
       if (msg.type === "hidejobs-job-loading") {
+        // fresh load: show skeleton + refresh button state
         setData(null);
         setIsJobSaved(false);
         setStatus("bookmarked");
@@ -88,7 +90,28 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
   return {
     title: "HideJobs",
     content: !data ? (
-      <Skeleton active />
+      <div className="space-y-3">
+        <Skeleton active />
+        <div className="flex flex-col items-center justify-center text-center space-y-2 py-2">
+          <p className="text-gray-700 text-sm">
+            If details don’t appear, try refreshing the page.
+          </p>
+          <Button
+            type="primary"
+            size="large"
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              try {
+                location.reload();
+              } catch {
+                // no-op fallback, just in case
+              }
+            }}
+          >
+            Refresh page
+          </Button>
+        </div>
+      </div>
     ) : (
       <div className="space-y-4">
         {/* Header with title + help button */}

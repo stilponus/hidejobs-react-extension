@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "NEW HIDEJOBS EXTENSIOn",
-  "description": "Injects a hidejobs-panel-ui world shadow element with auto/manual job support",
-  "version": "1.1",
+  "name": "Hide Applied Jobs, Listings from Specific Companies, and Jobs by Keywords",
+  "description": "Simplify your job search on LinkedIn, Indeed, and Glassdoor: Eliminate distractions and focus on the opportunities that matter most",
+  "version": "3.0",
   "icons": {
     "128": "icon128.png"
   },
@@ -29,22 +29,10 @@
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
-      ],
-      "exclude_matches": [
-        "https://*.hidejobs.com/*",
-        "https://hidejobs.com/*"
+        "https://*.linkedin.com/*"
       ],
       "js": [
-        "inject-shadow-ui.js"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://*.linkedin.com/jobs/*"
-      ],
-      "js": [
+        "inject-shadow-ui.js",
         "content-linkedin-scraper.js",
         "content-total-counter.js",
         "content-dismissed.js",
@@ -73,10 +61,54 @@
         "https://*.indeed.it/*",
         "https://*.indeed.es/*",
         "https://*.indeed.com.br/*",
-        "https://*.indeed.mx/*",
-        "https://*.indeed.jp/*"
+        "https://*.indeed.com.mx/*",
+        "https://*.indeed.co.jp/*",
+        "https://*.indeed.ae/*",
+        "https://*.indeed.com.ar/*",
+        "https://*.indeed.co.at/*",
+        "https://*.indeed.com.bh/*",
+        "https://*.indeed.cl/*",
+        "https://*.indeed.com.co/*",
+        "https://*.indeed.co.cr/*",
+        "https://*.indeed.cz/*",
+        "https://*.indeed.dk/*",
+        "https://*.indeed.com.ec/*",
+        "https://*.indeed.com.eg/*",
+        "https://*.indeed.fi/*",
+        "https://*.indeed.gr/*",
+        "https://*.indeed.com.hk/*",
+        "https://*.indeed.hu/*",
+        "https://*.indeed.co.id/*",
+        "https://*.indeed.co.il/*",
+        "https://*.indeed.com.kw/*",
+        "https://*.indeed.lu/*",
+        "https://*.indeed.com.my/*",
+        "https://*.indeed.com.ma/*",
+        "https://*.indeed.co.nz/*",
+        "https://*.indeed.no/*",
+        "https://*.indeed.com.om/*",
+        "https://*.indeed.com.pk/*",
+        "https://*.indeed.com.pe/*",
+        "https://*.indeed.com.ph/*",
+        "https://*.indeed.pl/*",
+        "https://*.indeed.pt/*",
+        "https://*.indeed.com.qa/*",
+        "https://*.indeed.ro/*",
+        "https://*.indeed.com.sa/*",
+        "https://*.indeed.com.sg/*",
+        "https://*.indeed.co.za/*",
+        "https://*.indeed.co.kr/*",
+        "https://*.indeed.se/*",
+        "https://*.indeed.com.tw/*",
+        "https://*.indeed.co.th/*",
+        "https://*.indeed.com.tr/*",
+        "https://*.indeed.com.ua/*",
+        "https://*.indeed.com.uy/*",
+        "https://*.indeed.com.ve/*",
+        "https://*.indeed.com.vn/*"
       ],
       "js": [
+        "inject-shadow-ui.js",
         "content-total-counter-indeed.js",
         "content-applied-indeed.js",
         "content-sponsored-indeed.js",
@@ -97,9 +129,22 @@
         "https://*.glassdoor.nl/*",
         "https://*.glassdoor.ie/*",
         "https://*.glassdoor.com.au/*",
-        "https://*.glassdoor.co.in/*"
+        "https://*.glassdoor.co.in/*",
+        "https://*.glassdoor.be/*",
+        "https://*.glassdoor.pt/*",
+        "https://*.glassdoor.at/*",
+        "https://*.glassdoor.ch/*",
+        "https://*.glassdoor.co.za/*",
+        "https://*.glassdoor.com.mx/*",
+        "https://*.glassdoor.com.br/*",
+        "https://*.glassdoor.com.ar/*",
+        "https://*.glassdoor.se/*",
+        "https://*.glassdoor.com.hk/*",
+        "https://*.glassdoor.co.nz/*",
+        "https://*.glassdoor.sg/*"
       ],
       "js": [
+        "inject-shadow-ui.js",
         "content-total-counter-glassdoor.js",
         "content-keywords-glassdoor.js",
         "content-applied-glassdoor.js",

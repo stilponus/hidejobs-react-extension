@@ -7,17 +7,20 @@ import {
   EyeInvisibleFilled,
   QuestionCircleFilled,
 } from "@ant-design/icons";
-import {
-  applyOverlaysFromLocalStorage,
-  toggleHideShowReposted,
-  HIDE_REPOSTED_STATE_KEY,
-  FEATURE_BADGE_KEY,
-} from "./RepostedJobs/repostedDom";
+
+// ⛔ [REPOSTED OFF] Entire import removed for Reposted feature
+// import {
+//   applyOverlaysFromLocalStorage,
+//   toggleHideShowReposted,
+//   HIDE_REPOSTED_STATE_KEY,
+//   FEATURE_BADGE_KEY,
+// } from "./RepostedJobs/repostedDom";
 
 import SubscribeButton from "./SubscribeButton";
 import InteractiveTour from "./Tours/InteractiveTour";
 import AppliedLinkedinTour from "./Tours/AppliedLinkedinTour";
 import CompanyLinkedinTour from "./Tours/CompanyLinkedinTour";
+import DismissedJobsTour from "./Tours/DismissedJobsTour";
 
 /* ─────────────────────────────────────────────────────────────
    Companies toggles (3 distinct keys, linked together):
@@ -31,7 +34,8 @@ const FILTER_KEYS = [
   "dismissed",
   "promoted",
   "viewed",
-  "repostedGhost",
+  // ⛔ [REPOSTED OFF] "repostedGhost" is commented out
+  // "repostedGhost",
   "indeedSponsored",
   "glassdoorApplied",
   "indeedApplied",
@@ -56,7 +60,8 @@ const FILTER_KEYS = [
 const DEFAULT_STATE = Object.fromEntries(FILTER_KEYS.map((k) => [k, false]));
 
 const PREMIUM_KEYS = new Set([
-  "repostedGhost",
+  // ⛔ [REPOSTED OFF] "repostedGhost" removed from premium keys
+  // "repostedGhost",
   "indeedSponsored",
   "glassdoorApplied",
   "indeedApplied",
@@ -97,21 +102,8 @@ function detectSite() {
   return "other";
 }
 
-// Clears reposted badges immediately
-function clearRepostedBadgesFromDOM() {
-  const cards = document.querySelectorAll(
-    ".job-card-container[data-job-id], .job-card-job-posting-card-wrapper[data-job-id], [data-occludable-job-id]"
-  );
-  cards.forEach((card) => {
-    card.querySelectorAll(".my-reposted-badge").forEach((b) => b.remove());
-    const li = card.closest("li.scaffold-layout__list-item");
-    if (li) {
-      if (card.dataset.hiddenBy === "reposted") delete card.dataset.hiddenBy;
-      if (li.dataset.hiddenBy === "reposted") delete li.dataset.hiddenBy;
-      li.style.display = "";
-    }
-  });
-}
+// ⛔ [REPOSTED OFF] This helper was only for Reposted badges; removed.
+// function clearRepostedBadgesFromDOM() { ... }
 
 export default function HideJobsFilters() {
   const chromeApi = useMemo(getChrome, []);
@@ -126,6 +118,8 @@ export default function HideJobsFilters() {
   const [appliedTourOpen, setAppliedTourOpen] = useState(false);
   const [companiesTourOpen, setCompaniesTourOpen] = useState(false);
   const [companiesTourStep, setCompaniesTourStep] = useState(1);
+  const [dismissedJobsTourOpen, setDismissedJobsTourOpen] = useState(false);
+
 
   const site = useMemo(detectSite, []);
   const visibleKeysForSite = useMemo(() => {
@@ -138,7 +132,8 @@ export default function HideJobsFilters() {
         "companies",          // Companies (LinkedIn)
         "userText",
         "filterByHours",
-        "repostedGhost",
+        // ⛔ [REPOSTED OFF] "repostedGhost" removed from visible rows
+        // "repostedGhost",
         // "totalOnPage" now lives in Settings, so not here
       ]);
     }
@@ -153,8 +148,8 @@ export default function HideJobsFilters() {
     }
     if (site === "glassdoor") {
       return new Set([
-        "glassdoorApplied",
         "glassdoorCompanies", // Companies (Glassdoor)
+        "glassdoorApplied",
         "glassdoorUserText",
         // "totalOnPage" now lives in Settings, so not here
       ]);
@@ -182,14 +177,18 @@ export default function HideJobsFilters() {
         toSet[`${k}BadgeVisible`] = false;
         toSet[`${k}Hidden`] = false;
       });
-      toSet[FEATURE_BADGE_KEY] = false;
-      toSet[HIDE_REPOSTED_STATE_KEY] = "false";
+
+      // ⛔ [REPOSTED OFF] do not touch feature flags/state for Reposted
+      // toSet[FEATURE_BADGE_KEY] = false;
+      // await chromeApi.storage.local.set({ [HIDE_REPOSTED_STATE_KEY]: "false" });
+
       await chromeApi.storage.local.set(toSet);
 
-      try {
-        toggleHideShowReposted(false);
-        clearRepostedBadgesFromDOM();
-      } catch { }
+      // ⛔ [REPOSTED OFF] no DOM toggles for Reposted
+      // try {
+      //   toggleHideShowReposted(false);
+      //   clearRepostedBadgesFromDOM();
+      // } catch { }
     }
 
     setValues((current) => {
@@ -212,7 +211,8 @@ export default function HideJobsFilters() {
         ...hiddenKeys,
         "dismissedBadgeVisible",
         "badgesCompact",
-        FEATURE_BADGE_KEY,
+        // ⛔ [REPOSTED OFF] remove FEATURE_BADGE_KEY
+        // FEATURE_BADGE_KEY,
         "isSubscribed",
         "subscriptionStatus",
 
@@ -222,6 +222,9 @@ export default function HideJobsFilters() {
 
         // NEW: master toggle for Total badge
         "totalOnPageBadgeVisible",
+
+        // ⛔ [REPOSTED OFF] remove HIDE_REPOSTED_STATE_KEY
+        // HIDE_REPOSTED_STATE_KEY,
       ],
       async (res) => {
         const next = { ...DEFAULT_STATE };
@@ -253,8 +256,8 @@ export default function HideJobsFilters() {
         next.indeedCompanies = companiesOn;
         next.glassdoorCompanies = companiesOn;
 
-        // Reposted ghost follows the feature badge
-        next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
+        // ⛔ [REPOSTED OFF] no default for repostedGhost
+        // next.repostedGhost = res?.[FEATURE_BADGE_KEY] !== false;
 
         // NEW: default "Total on Page" to TRUE if never set
         if (typeof res?.totalOnPageBadgeVisible === "boolean") {
@@ -361,10 +364,11 @@ export default function HideJobsFilters() {
         setCompact(!!changes.badgesCompact.newValue);
       }
 
-      if (FEATURE_BADGE_KEY in changes) {
-        delta.repostedGhost = changes[FEATURE_BADGE_KEY]?.newValue !== false;
-        touched = true;
-      }
+      // ⛔ [REPOSTED OFF] ignore FEATURE_BADGE_KEY changes
+      // if (FEATURE_BADGE_KEY in changes) {
+      //   delta.repostedGhost = changes[FEATURE_BADGE_KEY]?.newValue !== false;
+      //   touched = true;
+      // }
 
       if (touched) {
         setValues((prev) => ({ ...prev, ...delta }));
@@ -436,10 +440,11 @@ export default function HideJobsFilters() {
         updates["dismissedBadgeVisible"] = checked; // legacy mirror
       }
 
-      if (key === "repostedGhost") {
-        updates[FEATURE_BADGE_KEY] = checked;
-        updates[HIDE_REPOSTED_STATE_KEY] = checked ? "true" : "false";
-      }
+      // ⛔ [REPOSTED OFF] no writes for repostedGhost/feature flag
+      // if (key === "repostedGhost") {
+      //   updates[FEATURE_BADGE_KEY] = checked;
+      //   updates[HIDE_REPOSTED_STATE_KEY] = checked ? "true" : "false";
+      // }
 
       // 🔁 Write ALL THREE Companies keys together
       if (key === "companies" || key === "indeedCompanies" || key === "glassdoorCompanies") {
@@ -458,25 +463,27 @@ export default function HideJobsFilters() {
         updates["userTextBadgeVisible"] = checked;
         updates["userTextHidden"] = checked;
 
-        updates["indeedUserTextBadgeVisible"] = checked;  // UI-only mirrors (optional)
+        // UI mirrors (optional consistency)
+        updates["indeedUserTextBadgeVisible"] = checked;
         updates["indeedUserTextHidden"] = checked;
         updates["glassdoorUserTextBadgeVisible"] = checked;
         updates["glassdoorUserTextHidden"] = checked;
       }
 
       chromeApi.storage.local.set(updates, () => {
-        if (key === "repostedGhost") {
-          if (checked) {
-            try {
-              applyOverlaysFromLocalStorage();
-            } catch { }
-          } else {
-            try {
-              toggleHideShowReposted(false);
-              clearRepostedBadgesFromDOM();
-            } catch { }
-          }
-        }
+        // ⛔ [REPOSTED OFF] no overlay application or DOM cleanup
+        // if (key === "repostedGhost") {
+        //   if (checked) {
+        //     try {
+        //       applyOverlaysFromLocalStorage();
+        //     } catch { }
+        //   } else {
+        //     try {
+        //       toggleHideShowReposted(false);
+        //       clearRepostedBadgesFromDOM();
+        //     } catch { }
+        //   }
+        // }
       });
     }
 
@@ -520,14 +527,15 @@ export default function HideJobsFilters() {
   // All possible rows (filtered per site below) — does NOT include totalOnPage now
   const rows = [
     // 🔹 LinkedIn filters
-    { key: "dismissed", label: "Dismissed" },
+    { key: "dismissed", label: "Dismissed", tourKey: "dismissed" },
     { key: "promoted", label: "Promoted" },
     { key: "viewed", label: "Viewed" },
     { key: "applied", label: "Applied", premium: true, tourKey: "applied" },
     { key: "companies", label: "Companies", premium: true, tourKey: "companies" },
     { key: "userText", label: "Keywords", premium: true },
     { key: "filterByHours", label: "Filter by Hours", premium: true },
-    { key: "repostedGhost", label: "Reposted Jobs", premium: true },
+    // ⛔ [REPOSTED OFF] Row removed from UI
+    // { key: "repostedGhost", label: "Reposted Jobs", premium: true },
 
     // 🔹 Indeed filters
     { key: "indeedCompanies", label: "Companies", premium: true },
@@ -591,6 +599,7 @@ export default function HideJobsFilters() {
     );
 
     const openTourForRow = () => {
+      if (row.tourKey === "dismissed") setDismissedJobsTourOpen(true);
       if (row.tourKey === "applied") setAppliedTourOpen(true);
       if (row.tourKey === "companies") setCompaniesTourOpen(true);
     };
@@ -719,7 +728,20 @@ export default function HideJobsFilters() {
 
         {/* Total on Page */}
         <div className="flex items-center justify-between px-3 py-2">
-          <span className="truncate">Total hidden on page</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="truncate">Total hidden on page</span>
+            <Tooltip
+              title="Display a badge only when at least one job is hidden on the current page."
+              placement="top"
+            >
+              <QuestionCircleFilled
+                className="text-gray-400"
+                aria-label="Total hidden on page help"
+                role="img"
+                style={{ flex: "0 0 auto" }}
+              />
+            </Tooltip>
+          </div>
           <Switch
             size="small"
             checked={!!values.totalOnPage}
@@ -738,6 +760,7 @@ export default function HideJobsFilters() {
         onClose={() => setCompaniesTourOpen(false)}
         onStepChange={setCompaniesTourStep}
       />
+      <DismissedJobsTour open={dismissedJobsTourOpen} onClose={() => setDismissedJobsTourOpen(false)} />
     </div>
   );
 }

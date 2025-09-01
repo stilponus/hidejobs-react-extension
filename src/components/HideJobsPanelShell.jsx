@@ -30,7 +30,7 @@ import CompaniesHideList from "./CompaniesHideList";
 import RepostedPanel from "./RepostedJobs/RepostedPanel";
 import HideJobsHelpPanel from "./HideJobsHelpPanel"; // ← NEW
 
-const HideJobsPanelShell = () => {
+const HideJobsPanelShell = ({ currentHref }) => {
   const [modal, modalContextHolder] = Modal.useModal();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -41,11 +41,15 @@ const HideJobsPanelShell = () => {
   const [manualMode, setManualMode] = useState(false);
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [panelView, setPanelView] = useState("default");
+  const [panelView, setPanelView] = useState("filters");
 
   const containerRef = useRef(null);
   const buttonRef = useRef(null);
   const dragState = useRef({ drag: false, dragged: false, startY: 0, initTop: 0 });
+
+  // Safe fallback if prop is ever missing
+  const hrefFromProp =
+    typeof currentHref === "string" && currentHref.length ? currentHref : (typeof location !== "undefined" ? location.href : "");
 
   // helpers to disable/enable transition on demand (used by the tour)
   const setTransitionsEnabled = (enabled) => {
@@ -56,7 +60,7 @@ const HideJobsPanelShell = () => {
     if (button) button.style.transition = value;
   };
 
-  // Initial view
+  // Initial view — default to "filters" until user picks something else
   useEffect(() => {
     chrome?.storage?.local?.get(["hidejobs_panel_view"], (result) => {
       const v = result?.hidejobs_panel_view;
@@ -65,9 +69,13 @@ const HideJobsPanelShell = () => {
         v === "default" ||
         v === "companies" ||
         v === "reposted" ||
-        v === "help" // ← NEW
+        v === "help"
       ) {
         setPanelView(v);
+      } else {
+        // first time ever → set filters
+        setPanelView("filters");
+        chrome?.storage?.local?.set({ hidejobs_panel_view: "filters" });
       }
     });
   }, []);
@@ -211,15 +219,24 @@ const HideJobsPanelShell = () => {
     return () => clearTimeout(t);
   }, []);
 
-  // Detect manual mode
+  // Detect manual mode — recompute whenever currentHref changes
   useEffect(() => {
-    const noScraper =
-      !/\/\/[^/]*?hh\.ru\/vacancy\//i.test(location.href) &&
-      !/\/\/[^/]*?zarplata\.ru\/vacancy\//i.test(location.href) &&
-      !/\/\/(www\.)?linkedin\.com\/jobs\/(view|collections|search)\//i.test(location.href);
+    // LinkedIn: jobs view/collections/search
+    const isLinkedIn =
+      /\/\/(?:[a-z0-9-]+\.)?linkedin\.com\/jobs\/(view|collections|search)\b/i.test(hrefFromProp);
 
-    setManualMode(noScraper);
-  }, []);
+    // Indeed: any subdomain + any TLD, common job URLs: /viewjob, /jobs
+    const isIndeed =
+      /\/\/(?:[a-z0-9-]+\.)?indeed\.[a-z.]+\/(viewjob|jobs)\b/i.test(hrefFromProp);
+
+    // Glassdoor: any subdomain + any TLD, common job URLs: /Job, /JobSearch
+    const isGlassdoor =
+      /\/\/(?:[a-z0-9-]+\.)?glassdoor\.[a-z.]+\/(Job|JobSearch)\b/i.test(hrefFromProp);
+
+    const isSupportedJobPage = isLinkedIn || isIndeed || isGlassdoor;
+
+    setManualMode(!isSupportedJobPage);
+  }, [currentHref]);
 
   // Allow other components to force a view (companies/filters/reposted/help)
   useEffect(() => {
