@@ -27,6 +27,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
   const [rating, setRating] = useState(0);
   const [notes, setNotes] = useState("");
   const [showRefreshFallback, setShowRefreshFallback] = useState(false);
+  const [showingRefreshSkeleton, setShowingRefreshSkeleton] = useState(false);
 
   const [openTour, setOpenTour] = useState(false);
 
@@ -40,6 +41,11 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
 
   // Handle manual refresh
   const handleRefreshParsing = () => {
+    // Show skeleton for 300ms for visual feedback
+    setShowingRefreshSkeleton(true);
+    setTimeout(() => setShowingRefreshSkeleton(false), 300);
+
+    // Send the refresh command to scraper
     window.postMessage({ type: 'hidejobs-refresh-parsing' }, '*');
   };
 
@@ -102,7 +108,7 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
 
   return {
     title: "HideJobs",
-    content: !data ? (
+    content: (!data || showingRefreshSkeleton) ? (
       <div className="space-y-3">
         <Skeleton active />
         {showRefreshFallback && (
@@ -130,10 +136,10 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
     ) : (
       <div className="space-y-4">
         {/* Header with title + buttons */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            <h2 className="text-lg font-semibold text-hidejobs-700 mb-0">Add to Tracker</h2>
-            {!isJobSaved && (
+        <div className="flex items-center gap-1">
+          <h2 className="text-lg font-semibold text-hidejobs-700 mb-0">Add to Tracker</h2>
+          {!isJobSaved && (
+            <>
               <Tooltip title="How it works">
                 <Button
                   type="text"
@@ -143,17 +149,17 @@ const HideJobsPanelContent = ({ isJobSaved, setIsJobSaved, setTrackedJobId, hand
                   aria-label="How it works"
                 />
               </Tooltip>
-            )}
-          </div>
-          <Tooltip title="Refresh parsing">
-            <Button
-              type="text"
-              size="small"
-              icon={<ReloadOutlined className="text-gray-400" />}
-              onClick={handleRefreshParsing}
-              aria-label="Refresh parsing"
-            />
-          </Tooltip>
+              <Tooltip title="Refresh job info">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ReloadOutlined className="text-gray-400" />}
+                  onClick={handleRefreshParsing}
+                  aria-label="Refresh job info"
+                />
+              </Tooltip>
+            </>
+          )}
         </div>
 
         {/* Title and company */}

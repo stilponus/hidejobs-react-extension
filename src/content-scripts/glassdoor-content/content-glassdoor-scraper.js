@@ -7,6 +7,23 @@
   let extractionTimer = null;
   let observer = null;
 
+  // === Manual refresh handler ===
+  const handleRefreshCommand = () => {
+    log("Manual refresh command received");
+
+    // Send loading state immediately
+    window.postMessage({ type: 'hidejobs-job-loading' }, '*');
+
+    // Clear any pending extraction
+    if (extractionTimer) {
+      clearTimeout(extractionTimer);
+      extractionTimer = null;
+    }
+
+    // Start fresh extraction
+    attemptExtraction(1);
+  };
+
   // === Core extraction functions ===
   const getJobTitle = () => {
     const h1 = document.querySelector('h1[id^="jd-job-title-"]');
@@ -133,6 +150,11 @@
     return null;
   };
 
+  const getJobUrl = () => {
+    const jobId = getJobId();
+    return jobId ? `https://www.glassdoor.com/partner/jobListing.htm?jl=${jobId}` : window.location.origin + window.location.pathname;
+  };
+
   // === Main extraction ===
   const extractJobData = () => {
     const jobTitle = getJobTitle();
@@ -161,7 +183,7 @@
       job_description: description,
       job_required_skills: skills,
       externalJobId: getJobId(),
-      job_url: window.location.origin + window.location.pathname,
+      job_url: getJobUrl(),
       platform: 'Glassdoor',
       employment_type: getEmploymentType(),
       work_format: getWorkFormat()
@@ -238,6 +260,13 @@
   // === Setup ===
   const init = () => {
     log('Initializing simple Glassdoor parser...');
+
+    // Listen for refresh commands from panel
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'hidejobs-refresh-parsing') {
+        handleRefreshCommand();
+      }
+    });
 
     // Hook history API
     const originalPushState = history.pushState;

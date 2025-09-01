@@ -22,6 +22,36 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
   const normalizeSkill = (text) =>
     String(text || "").trim().toLowerCase().replace(/\s+experience$/, "");
 
+  // Function to clean HTML from job description
+  const cleanJobDescription = (htmlString) => {
+    if (!htmlString || typeof htmlString !== 'string') return "";
+
+    return htmlString
+      .replace(/<br\s*\/?>/gi, "\n") // convert <br> to newline
+      .replace(/<\/p>/gi, "\n\n") // </p> to double break
+      .replace(/<p[^>]*>/gi, "") // remove <p> opening tags
+      .replace(/<\/div>/gi, "\n") // convert </div> to newline
+      .replace(/<div[^>]*>/gi, "") // remove <div> opening tags
+      .replace(/<li[^>]*>/gi, "• ") // bullet prefix with bullet character
+      .replace(/<\/li>/gi, "\n") // bullet line break
+      .replace(/<\/ul>/gi, "\n") // break after whole list
+      .replace(/<\/ol>/gi, "\n") // break after ordered list
+      .replace(/<h[1-6][^>]*>/gi, "\n") // heading start with newline
+      .replace(/<\/h[1-6]>/gi, "\n\n") // heading end with double break
+      .replace(/<[^>]+>/g, "") // remove all other HTML
+      .replace(/&nbsp;/gi, " ") // convert non-breaking spaces
+      .replace(/&amp;/gi, "&") // convert ampersands
+      .replace(/&lt;/gi, "<") // convert less than
+      .replace(/&gt;/gi, ">") // convert greater than
+      .replace(/&quot;/gi, '"') // convert quotes
+      .replace(/&#39;/gi, "'") // convert apostrophes
+      .replace(/[ \t]+\n/g, "\n") // strip space before \n
+      .replace(/\n[ \t]+/g, "\n") // strip space after \n
+      .replace(/\n{4,}/g, "\n\n\n") // limit to max 3 consecutive breaks
+      .replace(/[ \t]{2,}/g, " ") // collapse multiple spaces
+      .trim() || "";
+  };
+
   const handleSave = async () => {
     console.log("🔵 Save button clicked");
     console.log("📋 jobContent (full):", data);
@@ -54,7 +84,7 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
           job_rating: rating || 0,
           job_url: data.job_url || "",
           job_location: data.job_location || "",
-          job_description: data.job_description || "",
+          job_description: cleanJobDescription(data.job_description),
           comp_currency: data.comp_currency || "",
           comp_min_salary: data.comp_min_salary || "",
           comp_max_salary: data.comp_max_salary || "",
