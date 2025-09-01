@@ -5,7 +5,7 @@ import { PlusOutlined, CheckOutlined } from "@ant-design/icons";
 const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSaved, setIsJobSaved, setTrackedJobId }) => {
   const [loading, setLoading] = useState(false);
 
-  // Function to transform skills array to the required job_keywords_json format
+  // Function to transform skills array to the required job_keywords format
   const transformSkillsToKeywordsJson = (skills) => {
     if (!Array.isArray(skills) || skills.length === 0) return undefined;
 
@@ -66,8 +66,8 @@ const HideJobsPanelSave = ({ data, status, rating, notes, jobStatuses, isJobSave
           work_format: data.work_format || "",
           employment_type: data.employment_type || "",
           job_notes: notes || "",
-          // 🔧 FIXED: Transform skills to job_keywords_json format
-          job_keywords_json: transformSkillsToKeywordsJson(data.job_required_skills),
+          // 🔧 FIXED: Transform skills to job_keywords format
+          job_keywords: transformSkillsToKeywordsJson(data.job_required_skills),
         },
       };
 

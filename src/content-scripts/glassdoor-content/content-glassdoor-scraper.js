@@ -55,11 +55,19 @@
 
     const toNumber = (chunk) => {
       if (!chunk) return null;
-      const raw = chunk.replace(/[^0-9.kmKM]/g, "").toLowerCase();
-      if (!raw) return null;
-      if (raw.endsWith("k")) return Math.round(parseFloat(raw) * 1_000);
-      if (raw.endsWith("m")) return Math.round(parseFloat(raw) * 1_000_000);
-      return parseInt(raw.replace(/[^\d]/g, ""), 10) || null;
+
+      // Extract only the first valid number with optional K/M
+      const match = chunk.match(/([\d.,]+)\s*([kKmM]?)/);
+      if (!match) return null;
+
+      let num = parseFloat(match[1].replace(/,/g, ""));
+      if (isNaN(num)) return null;
+
+      const unit = match[2].toLowerCase();
+      if (unit === "k") num *= 1_000;
+      if (unit === "m") num *= 1_000_000;
+
+      return Math.round(num);
     };
 
     const parts = t.split(/\s*-\s*/);
@@ -125,19 +133,24 @@
 
   // Salary text (e.g., <div data-test="detailSalary">...</div>), or id like jd-salary-XXXXXXXX
   const getSalaryText = () => {
-    const byDataTest = getText('[data-test="detailSalary"]');
-    if (byDataTest) return normalizeSpace(byDataTest);
-    const byId = document.querySelector('[id^="jd-salary-"]');
-    return normalizeSpace(byId?.innerText || null);
+    const header = getHeader();
+    if (!header) return null;
+
+    // First try inside this header
+    const salaryEl = header.querySelector('[data-test="detailSalary"], [id^="jd-salary-"]');
+    return normalizeSpace(salaryEl?.innerText || null);
   };
 
   // Key skills from “Your qualifications for this job”
   // Elements include data-test="verified-qualifications-list-Agile" etc.
   const getKeySkills = () => {
     const nodes = document.querySelectorAll('[data-test^="verified-qualifications-list-"]');
-    const skills = Array.from(nodes).map((n) => normalizeSpace(n.textContent || ""));
+    const skills = Array.from(nodes)
+      .map((n) => normalizeSpace(n.textContent || ""))
+      .filter((txt) => txt && txt.toLowerCase() !== "edit"); // 🚫 filter out "Edit"
     return uniq(skills);
   };
+
 
   // Job description HTML
   // Prefer the description section with a stable brandviews marker, no brittle classnames.
