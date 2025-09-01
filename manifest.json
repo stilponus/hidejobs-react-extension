@@ -144,6 +144,7 @@
         "https://*.glassdoor.sg/*"
       ],
       "js": [
+        "content-glassdoor-scraper.js",
         "inject-shadow-ui.js",
         "content-total-counter-glassdoor.js",
         "content-keywords-glassdoor.js",

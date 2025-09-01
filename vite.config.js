@@ -49,8 +49,9 @@ export default defineConfig({
         "content-companies-indeed": path.resolve(__dirname, "src/content-scripts/indeed-content/content-companies-indeed.js"),
         "content-keywords-indeed": path.resolve(__dirname, "src/content-scripts/indeed-content/content-keywords-indeed.js"),
         "content-total-counter-indeed": path.resolve(__dirname, "src/content-scripts/indeed-content/content-total-counter-indeed.js"),
-        
 
+
+        "content-glassdoor-scraper": path.resolve(__dirname, "src/content-scripts/glassdoor-content/content-glassdoor-scraper.js"),
         "content-keywords-glassdoor": path.resolve(__dirname, "src/content-scripts/glassdoor-content/content-keywords-glassdoor.js"),
         "content-applied-glassdoor": path.resolve(__dirname, "src/content-scripts/glassdoor-content/content-applied-glassdoor.js"),
         "content-companies-glassdoor": path.resolve(__dirname, "src/content-scripts/glassdoor-content/content-companies-glassdoor.js"),
