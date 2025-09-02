@@ -309,6 +309,9 @@ function clearRepostedBadgesFromDOM() {
               Collapse: {
                 contentPadding: "0px 0px",
               },
+              Rate: {
+              starColor: "#f59e0b", // Tailwind amber-500
+            },
             },
           }}
         >

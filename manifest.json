@@ -31,6 +31,9 @@
       "matches": [
         "https://*.linkedin.com/*"
       ],
+      "exclude_matches": [
+        "https://www.linkedin.com/uas/login*"
+      ],
       "js": [
         "inject-shadow-ui.js",
         "content-linkedin-scraper.js",
