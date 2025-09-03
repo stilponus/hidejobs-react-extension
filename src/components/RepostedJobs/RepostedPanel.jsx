@@ -415,7 +415,7 @@ export default function RepostedPanel() {
         </Tooltip>
       ),
       children: (
-        <div className={`${isSubscribed ? "max-h-80" : "max-h-57"} overflow-auto`}>
+        <div style={{ height: 'calc(100vh - 372px)', overflow: 'auto' }}>
           <List
             size="small"
             dataSource={details}
@@ -558,12 +558,12 @@ export default function RepostedPanel() {
 
   // ---------------- Render main panel content for LinkedIn pages ----------------
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full">
       {modalContextHolder}
       {messageContextHolder}
 
       {/* Header row: title left, master feature toggle right */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
           <h2 className="text-lg font-semibold text-hidejobs-700">Reposted jobs</h2>
           {/* ⬅️ New: Tour trigger next to title */}
@@ -605,11 +605,11 @@ export default function RepostedPanel() {
 
       {/* Subscribe CTA area — show skeleton while subscription is loading */}
       {subscriptionLoading ? (
-        <div className="rounded-md border border-gray-200 p-3">
+        <div className="rounded-md border border-gray-200 p-3 mb-4">
           <Skeleton active paragraph={{ rows: 2 }} />
         </div>
       ) : (
-        !isSubscribed && <SubscribeButton />
+        !isSubscribed && <div className="mb-4"><SubscribeButton /></div>
       )}
 
       {/* Scan + Cancel row */}
@@ -650,7 +650,7 @@ export default function RepostedPanel() {
       </div>
 
       {/* Progress */}
-      <div className="my-4">
+      <div className="mb-4">
         <Progress percent={uiReset ? 0 : Math.round(progress)} />
       </div>
 
@@ -672,20 +672,22 @@ export default function RepostedPanel() {
       )}
 
       {/* Collapsible list OR empty state */}
-      {hostSupported && (
-        details.length > 0 ? (
-          <Collapse className="bg-white" items={collapseItems} />
-        ) : (
-          firstScanDone && !scanning && (
-            <div className="rounded-lg border border-gray-200 p-6 text-center">
-              <Empty
-                description={<span className="text-gray-600">No reposted jobs were detected during the last scan.</span>}
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            </div>
+      <div className="flex-1 min-h-0">
+        {hostSupported && (
+          details.length > 0 ? (
+            <Collapse className="bg-white" items={collapseItems} />
+          ) : (
+            firstScanDone && !scanning && (
+              <div className="rounded-lg border border-gray-200 p-6 text-center">
+                <Empty
+                  description={<span className="text-gray-600">No reposted jobs were detected during the last scan.</span>}
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                />
+              </div>
+            )
           )
-        )
-      )}
+        )}
+      </div>
 
       <RepostedJobsTour
         open={repostedTourOpen}
