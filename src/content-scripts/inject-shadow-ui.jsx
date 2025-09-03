@@ -189,6 +189,24 @@ function clearRepostedBadgesFromDOM() {
   width: 18px !important;
   height: 18px !important;
 }
+
+.icon-16 {
+  font-size: 16px !important;
+}
+
+.icon-16 svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Amber text utility for icons (Tailwind-style) */
+.text-amber-500 {
+  color: #f59e0b !important; /* Tailwind amber-500 */
+}
+.text-amber-500 svg {
+  fill: currentColor !important;
+  color: inherit !important;
+}
   
   ${tailwindCss.replace(/(\d*\.?\d+)rem/g, (_, rem) => `${parseFloat(rem) * 16}px`)}
 `;

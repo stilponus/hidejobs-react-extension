@@ -99,13 +99,13 @@ export default function RepostedPanel() {
       if (item?.companyName && item?.jobTitle) return item;
 
       const card =
-        document.querySelector(`[data-occludable-job-id="${item.id}"]`) ||
-        document.querySelector(`[data-job-id="${item.id}"]`) ||
+        document.querySelector(`[data-occludable-job-id="${item.linkedinJobId}"]`) ||
+        document.querySelector(`[data-job-id="${item.linkedinJobId}"]`) ||
         Array.from(
           document.querySelectorAll(
             ".job-card-job-posting-card-wrapper[data-job-id]"
           )
-        ).find((n) => n.getAttribute("data-job-id") === item.id);
+        ).find((n) => n.getAttribute("data-job-id") === item.linkedinJobId);
 
       const patch = { ...item };
       if (!patch.jobTitle && card) patch.jobTitle = getCardTitle(card);
@@ -281,24 +281,24 @@ export default function RepostedPanel() {
       : `Hide ${repostedCount} reposted job${repostedCount === 1 ? "" : "s"}`;
   };
 
-  const handleDeleteJob = async (jobId, e) => {
+  const handleDeleteJob = async (linkedinJobId, e) => {
     e?.stopPropagation?.();
     try {
       const currentDetails = await loadRepostedDetails();
-      const updatedDetails = currentDetails.filter(item => item.id !== jobId);
+      const updatedDetails = currentDetails.filter(item => item.linkedinJobId !== linkedinJobId);
       await saveRepostedDetails(updatedDetails);
 
       const currentMap = await chrome.storage.local.get([REPOSTED_JOBS_KEY]);
       const mapData = JSON.parse(currentMap[REPOSTED_JOBS_KEY] || "{}");
-      delete mapData[jobId];
+      delete mapData[linkedinJobId];
       await chrome.storage.local.set({ [REPOSTED_JOBS_KEY]: JSON.stringify(mapData) });
 
-      if (window.__repostedMapCache) delete window.__repostedMapCache[jobId];
+      if (window.__repostedMapCache) delete window.__repostedMapCache[linkedinJobId];
 
       const cardSelectors = [
-        `[data-occludable-job-id="${jobId}"]`,
-        `[data-job-id="${jobId}"]`,
-        `.job-card-job-posting-card-wrapper[data-job-id="${jobId}"]`,
+        `[data-occludable-job-id="${linkedinJobId}"]`,
+        `[data-job-id="${linkedinJobId}"]`,
+        `.job-card-job-posting-card-wrapper[data-job-id="${linkedinJobId}"]`,
       ];
       cardSelectors.forEach(selector => {
         const card = document.querySelector(selector);
@@ -460,7 +460,7 @@ export default function RepostedPanel() {
                           type="text"
                           size="small"
                           icon={<CloseOutlined />}
-                          onClick={(e) => handleDeleteJob(item.id, e)}
+                          onClick={(e) => handleDeleteJob(item.linkedinJobId, e)}
                           className="ml-2 text-gray-400 hover:text-hidejobs-red-500"
                         />
                       </Tooltip>

@@ -1,7 +1,7 @@
 // src/components/RepostedJobs/repostedDom.js
 
 export const REPOSTED_JOBS_KEY = "myRepostedJobs"; // map: { [jobId]: true }
-export const REPOSTED_JOBS_DETAILS_KEY = "myRepostedJobsDetails"; // [{id, jobTitle, companyName, ...}]
+export const REPOSTED_JOBS_DETAILS_KEY = "myRepostedJobsDetails"; // [{linkedinJobId, jobTitle, companyName, location, jobUrl, detectedAt, repostedText}]
 export const HIDE_REPOSTED_STATE_KEY = "myHideRepostedActive";
 
 // NOTE: keep this exact key in sync everywhere (Filters, inject, hooks)
@@ -47,14 +47,14 @@ export async function saveRepostedDetails(arr) {
   await chrome?.storage?.local?.set({ [REPOSTED_JOBS_DETAILS_KEY]: arr });
 }
 
-/** Deduplicate by "id" (keep first occurrence). Returns the deduped array. */
+/** Deduplicate by "linkedinJobId" (keep first occurrence). Returns the deduped array. */
 export function dedupeRepostedDetails(arr) {
   const seen = new Set();
   const out = [];
   for (const item of arr) {
-    if (!item?.id) continue;
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
+    if (!item?.linkedinJobId) continue;
+    if (seen.has(item.linkedinJobId)) continue;
+    seen.add(item.linkedinJobId);
     out.push(item);
   }
   return out;
@@ -246,16 +246,17 @@ export async function applyOverlaysFromLocalStorage() {
 /* ------------------------------- Upsert detail ------------------------------ */
 
 export async function upsertRepostedDetail(detail) {
-  // detail: { id, jobTitle, companyName, location?, jobUrl?, detectedAt? }
+  // detail: { linkedinJobId, jobTitle, companyName, location?, jobUrl?, detectedAt?, repostedText? }
   const existing = await loadRepostedDetails();
-  const idx = existing.findIndex((x) => x.id === detail.id);
+  const idx = existing.findIndex((x) => x.linkedinJobId === detail.linkedinJobId);
   const record = {
-    id: detail.id,
+    linkedinJobId: detail.linkedinJobId,
     jobTitle: detail.jobTitle || null,
     companyName: detail.companyName || null,
     location: detail.location ?? null,
     jobUrl: detail.jobUrl ?? null,
     detectedAt: detail.detectedAt ?? Date.now(),
+    repostedText: detail.repostedText ?? null,   // 👈 NEW
   };
   if (idx >= 0) {
     existing[idx] = { ...existing[idx], ...record };

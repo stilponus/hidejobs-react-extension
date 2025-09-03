@@ -1,5 +1,43 @@
 console.log("🧠 Background loaded");
 
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.runtime.setUninstallURL("https://hidejobs.com/uninstall", () => {
+    if (chrome.runtime.lastError) {
+      console.error("Failed to set uninstall URL:", chrome.runtime.lastError.message);
+    }
+  });
+
+  const menus = [
+    { id: "visitWebsite", title: "🌐 Visit HideJobs Website" },
+    { id: "sendFeedback", title: "💬 Send Feedback" },
+    { id: "leaveReview", title: "👍 Leave a Review" },
+  ];
+
+  menus.forEach(menu => {
+    chrome.contextMenus.create({
+      id: menu.id,
+      title: menu.title,
+      contexts: ["action"]
+    });
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  switch (info.menuItemId) {
+    case "visitWebsite":
+      chrome.tabs.create({ url: "https://hidejobs.com/" });
+      break;
+    case "sendFeedback":
+      chrome.tabs.create({ url: "mailto:info@hidejobs.com" });
+      break;
+    case "leaveReview":
+      chrome.tabs.create({
+        url: "https://chromewebstore.google.com/detail/hide-companies-promoted-a/lbpfijpapbbpdmniijjbbhgaagoiihkg/reviews"
+      });
+      break;
+  }
+});
+
 // Kick a silent subscription refresh on background load
 refreshSubscriptionStatusFromServer();
 
@@ -297,7 +335,7 @@ async function resetAllFeaturesForLoggedOutUser(reason = "unknown") {
       // totals + counters
       totalOnPageBadgeVisible: false,
       totalHiddenOnPage: 0,        // existing counter you already use
-      totalOnPageHidden: false,        
+      totalOnPageHidden: false,
       companiesHiddenCount: 0,
       keywordHiddenCount: 0,
 
@@ -342,5 +380,45 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
   const hasUid = !!next?.uid;
   if (!hasUid) {
     await resetAllFeaturesForLoggedOutUser("storage_user_removed");
+  }
+});
+
+
+/* =========================================================================
+   X) Internal messages (save reposted jobs via backend)
+   ========================================================================= */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "save-reposted-jobs" && Array.isArray(message?.payload?.reposted_jobs)) {
+    (async () => {
+      try {
+        const { user } = await chrome.storage.local.get(["user"]);
+        const uid = user?.uid;
+        if (!uid) {
+          sendResponse({ success: false, error: "No UID in extension storage" });
+          return;
+        }
+
+        // Build payload for Cloud Function
+        const body = {
+          user_id: uid,
+          reposted_jobs: message.payload.reposted_jobs,
+        };
+
+        const res = await fetch("https://appsaverepostedjobs-2j2kwatdfq-uc.a.run.app", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+
+        sendResponse({ success: true, data: json });
+      } catch (err) {
+        console.error("❌ save-reposted-jobs failed:", err);
+        sendResponse({ success: false, error: err?.message || String(err) });
+      }
+    })();
+    return true; // keep channel open for async sendResponse
   }
 });

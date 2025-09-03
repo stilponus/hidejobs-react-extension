@@ -1,6 +1,7 @@
 // src/components/HideJobsPanelShell.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { Button, Dropdown, Modal, message } from "antd";
+import { Button, Dropdown, Modal, message, Tooltip } from "antd";
+
 import {
   MenuOutlined,
   PlusSquareOutlined,
@@ -14,6 +15,7 @@ import {
   QuestionCircleFilled,
   LogoutOutlined,
   LoginOutlined,
+  CrownFilled, // ← NEW
 } from "@ant-design/icons";
 
 import LogoNoBackground from "../assets/LogoNoBackground";
@@ -42,6 +44,7 @@ const HideJobsPanelShell = ({ currentHref }) => {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [panelView, setPanelView] = useState("filters");
+  const [isSubscribed, setIsSubscribed] = useState(false); // ← NEW
 
   const containerRef = useRef(null);
   const buttonRef = useRef(null);
@@ -97,6 +100,28 @@ const HideJobsPanelShell = ({ currentHref }) => {
       chrome?.storage?.onChanged?.removeListener(handleStorageChange);
     };
   }, []);
+
+  // Subscription status (reads the cached values from background) — NEW
+  useEffect(() => {
+    // initial read
+    chrome?.storage?.local?.get(["subscriptionStatus", "isSubscribed"], (result) => {
+      setIsSubscribed(!!result?.isSubscribed);
+    });
+
+    // react to updates from background refreshes
+    const handleSubChange = (changes, namespace) => {
+      if (namespace !== "local") return;
+      if ("isSubscribed" in changes) {
+        setIsSubscribed(!!changes.isSubscribed.newValue);
+      } else if ("subscriptionStatus" in changes) {
+        // optional: derive from status if you ever need
+        // but we keep using the boolean isSubscribed for simplicity
+      }
+    };
+
+    chrome?.storage?.onChanged?.addListener(handleSubChange);
+    return () => chrome?.storage?.onChanged?.removeListener(handleSubChange);
+  }, []); // ← NEW
 
   // Panel visibility from storage (on mount)
   useEffect(() => {
@@ -502,6 +527,20 @@ const HideJobsPanelShell = ({ currentHref }) => {
             <span className="text-xl font-bold text-hidejobs-700">HideJobs</span>
           </div>
           <div className="flex items-center gap-2">
+            {isSubscribed && (
+              <Tooltip title="Youre subscribed!">
+                <Button
+                  type="text"
+                  icon={<CrownFilled className="text-xl text-amber-500" />}
+                  onClick={() =>
+                    chrome?.runtime?.sendMessage?.({
+                      type: "open-tab",
+                      url: "https://app.hidejobs.com/account/subscription",
+                    })
+                  }
+                />
+              </Tooltip>
+            )}
             <Dropdown
               menu={{ items: dropdownItems }}
               placement="bottomRight"

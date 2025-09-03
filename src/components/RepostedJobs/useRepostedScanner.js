@@ -87,6 +87,21 @@ function isPaneReposted(paneEl) {
   });
 }
 
+function getRepostedText(paneEl) {
+  const spans = Array.from(
+    paneEl?.querySelectorAll(
+      ".job-details-jobs-unified-top-card__tertiary-description-container span"
+    ) || []
+  );
+  for (const span of spans) {
+    const txt = span.innerText.trim();
+    if (/^Reposted\s+\d+\s+(minute|hour|day|week|month)s?\s+ago$/i.test(txt)) {
+      return txt; // e.g. "Reposted 1 week ago"
+    }
+  }
+  return null;
+}
+
 /* ----------------- Robust title/company extraction -------------------- */
 function getCardTitle(card) {
   const cands = [
@@ -305,6 +320,8 @@ export default function useRepostedScanner() {
     const t0 = performance.now();
     let foundCount = 0;
 
+    const newlyDetectedJobs = []; // track only new reposted jobs
+
     chrome?.runtime?.sendMessage?.({
       type: "trackEvent",
       eventName: "button_click",
@@ -427,25 +444,38 @@ export default function useRepostedScanner() {
               ".artdeco-entity-lockup__caption div[dir='ltr'], .job-card-container__metadata-wrapper li span"
             )?.innerText?.trim() || null;
           const jobUrl = id ? `https://www.linkedin.com/jobs/view/${id}/` : null;
+          const repostedText = getRepostedText(pane);
 
           await upsertRepostedDetail({
-            id,
+            linkedinJobId: id,   // 👈 renamed field
             jobTitle,
             companyName,
             location,
             jobUrl,
             detectedAt: Date.now(),
+            repostedText,
+          });
+
+          // Collect for Firebase save
+          newlyDetectedJobs.push({
+            linkedinJobId: id,
+            jobTitle,
+            companyName,
+            location,
+            jobUrl,
+            detectedAt: Date.now(),
+            repostedText,
           });
 
           // optional telemetry
           window.dispatchEvent(
             new CustomEvent("repostedJobDetected", {
-              detail: { jobId: id, timestamp: Date.now(), jobTitle, companyName, location, jobUrl },
+              detail: { linkedinJobId: id, timestamp: Date.now(), jobTitle, companyName, location, jobUrl },
             })
           );
           chrome?.runtime?.sendMessage?.({
             type: "logRepostedJobToFirebase",
-            payload: { jobId: id, jobTitle, companyName, location, jobUrl },
+            payload: { linkedinJobId: id, jobTitle, companyName, location, jobUrl },
           });
 
           foundCount += 1;
@@ -472,6 +502,23 @@ export default function useRepostedScanner() {
       eventName: "scan_complete",
       eventParams: { duration: secs, new_jobs_found: foundCount },
     });
+
+    // Send all new jobs from this scan to Firebase
+    if (newlyDetectedJobs.length > 0) {
+      chrome.runtime.sendMessage(
+        {
+          type: "save-reposted-jobs",
+          payload: { reposted_jobs: newlyDetectedJobs },
+        },
+        (response) => {
+          if (response?.success) {
+            console.log("✅ Saved reposted jobs to Firebase:", response.data);
+          } else {
+            console.warn("⚠️ Failed to save reposted jobs:", response?.error);
+          }
+        }
+      );
+    }
 
     await chrome?.storage?.local?.set({ [HIDE_REPOSTED_STATE_KEY]: "false" });
 

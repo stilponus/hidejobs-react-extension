@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Switch, Tooltip, Button, Empty, Space } from "antd";
 
+import { ReloadOutlined } from "@ant-design/icons";
+
 import {
   CrownFilled,
   EyeInvisibleFilled,
@@ -105,7 +107,7 @@ function detectSite() {
 // ⛔ [REPOSTED OFF] This helper was only for Reposted badges; removed.
 // function clearRepostedBadgesFromDOM() { ... }
 
-export default function HideJobsFilters() {
+export default function HideJobsFilters({ currentHref }) {
   const chromeApi = useMemo(getChrome, []);
   const [values, setValues] = useState(DEFAULT_STATE);
   const [compact, setCompact] = useState(false);
@@ -406,6 +408,90 @@ export default function HideJobsFilters() {
     return () => window.removeEventListener("hidejobs-filters-changed", handleTourEvent);
   }, []);
 
+  // ─────────────────────────────────────────────────────────────
+  // Stuck detector (no URL/host checks):
+  // Show the "Refresh" message ONLY when at least one filter is ON
+  // (and its badge is visible) AND all HiddenCount totals are zero.
+  // ─────────────────────────────────────────────────────────────
+  const [showReloadSuggestion, setShowReloadSuggestion] = React.useState(false);
+  const [diagnostic, setDiagnostic] = React.useState({ active: [], counts: {} });
+
+  // Filters that actually hide jobs and produce HiddenCount values
+  const COUNTED_FILTER_KEYS = [
+    // LinkedIn
+    "dismissed",
+    "promoted",
+    "viewed",
+    "applied",
+    "companies",
+    // Indeed
+    "indeedSponsored",
+    "indeedApplied",
+    "indeedCompanies",
+    // Glassdoor
+    "glassdoorApplied",
+    "glassdoorCompanies",
+  ];
+
+  // Read storage and decide if we're "stuck"
+  function checkStuck() {
+    return new Promise((resolve) => {
+      const storageKeys = [];
+      COUNTED_FILTER_KEYS.forEach((k) => {
+        storageKeys.push(`${k}Hidden`, `${k}HiddenCount`, `${k}BadgeVisible`);
+      });
+
+      chrome?.storage?.local?.get(storageKeys, (res) => {
+        const active = COUNTED_FILTER_KEYS.filter(
+          (k) => !!res[`${k}Hidden`] && (res[`${k}BadgeVisible`] !== false)
+        );
+
+        let totalHidden = 0;
+        const counts = {};
+        COUNTED_FILTER_KEYS.forEach((k) => {
+          const n = Number(res[`${k}HiddenCount`] || 0);
+          counts[k] = n;
+          totalHidden += n;
+        });
+
+        setDiagnostic({ active, counts });
+        const stuck = active.length > 0 && totalHidden === 0;
+        setShowReloadSuggestion(stuck);
+        resolve({ active, totalHidden, counts, stuck });
+      });
+    });
+  }
+
+  // Re-check soon after render and when storage counters change
+  React.useEffect(() => {
+    const t1 = setTimeout(checkStuck, 1200);
+    const t2 = setTimeout(checkStuck, 3200);
+
+    const onChange = (changes, area) => {
+      if (area !== "local") return;
+      let relevant = false;
+      for (const k of COUNTED_FILTER_KEYS) {
+        if (
+          (`${k}Hidden` in changes) ||
+          (`${k}HiddenCount` in changes) ||
+          (`${k}BadgeVisible` in changes)
+        ) {
+          relevant = true;
+          break;
+        }
+      }
+      if (relevant) checkStuck();
+    };
+
+    chrome?.storage?.onChanged?.addListener(onChange);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      chrome?.storage?.onChanged?.removeListener(onChange);
+    };
+  }, []); // no currentHref dependency
+
+
   const updateValue = (key, checked) => {
     if (PREMIUM_KEYS.has(key) && !isSubscribed) return;
 
@@ -611,7 +697,7 @@ export default function HideJobsFilters() {
         className={`flex items-center justify-between px-3 py-2 ${isLast ? "" : "border-b border-gray-100"}`}
       >
         <div className="flex items-center gap-2 min-w-0">
-          {row.premium ? <CrownFilled className="text-[#b8860b]" /> : null}
+          {row.premium ? <CrownFilled className="icon-16 text-amber-500" /> : null}
           <span className={`truncate ${disabled ? "text-gray-400" : ""}`}>{row.label}</span>
 
           {row.tourKey ? (
@@ -711,6 +797,25 @@ export default function HideJobsFilters() {
           </div>
         )}
       </div>
+
+      {showReloadSuggestion && (
+        <div className="mb-3 px-3 py-2 bg-yellow-50 border border-yellow-300 rounded-md text-yellow-800">
+          <div>
+            <span className="text-sm">
+              Filters are ON, but nothing was hidden — either nothing to hide, or you may need to refresh.
+            </span>
+          </div>
+          <div className="mt-2">
+            <Button
+              type="primary"
+              icon={<ReloadOutlined />}
+              onClick={() => { try { location.reload(); } catch { } }}
+            >
+              Refresh page
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* NEW: Settings container */}
       <div className="rounded-lg border border-gray-200">
