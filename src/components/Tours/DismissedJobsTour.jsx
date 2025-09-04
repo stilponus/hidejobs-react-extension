@@ -346,7 +346,7 @@ export default function DismissedJobsTour({ open, onClose }) {
 
   const stepText =
     step === 1 ? (
-      "To start hiding jobs from your search results, turn ON any filter you want to use—it will hide matching jobs immediately. Here's the Dismissed filter as an example—toggle it on now or click Next to continue."
+      "Turn ON the Dismissed filter to immediately hide jobs you’ve marked as dismissed. Toggle it on now, or click Next to continue."
     ) : step === 2 ? (
       <div className="space-y-2">
         <div>

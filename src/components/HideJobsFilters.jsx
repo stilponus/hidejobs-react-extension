@@ -772,6 +772,8 @@ export default function HideJobsFilters({ currentHref }) {
         <div className="flex items-center gap-2" />
       </div>
 
+      {!isSubscribed && <SubscribeButton />}
+
       {/* Main toggles container */}
       <div className="rounded-lg border border-gray-200">
         {/* Free rows */}
@@ -854,8 +856,6 @@ export default function HideJobsFilters({ currentHref }) {
           />
         </div>
       </div>
-
-      {!isSubscribed && <SubscribeButton />}
 
       {/* Tours */}
       <InteractiveTour open={dismissedTourOpen} onClose={() => setDismissedTourOpen(false)} />

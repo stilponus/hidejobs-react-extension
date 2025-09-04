@@ -60,6 +60,20 @@ async function refreshSubscriptionStatusFromServer() {
     });
 
     const data = await resp.json().catch(() => ({}));
+
+    // Seed local activationDate from server startDate if missing
+    try {
+      const seedStart = data?.raw?.new_subscription?.startDate;
+      if (seedStart) {
+        const { activationDate } = await chrome.storage.local.get(["activationDate"]);
+        if (!activationDate) {
+          await chrome.storage.local.set({ activationDate: seedStart });
+        }
+      }
+    } catch (_) {
+      // ignore seeding errors
+    }
+
     if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
 
     const status = typeof data?.status === "string" ? data.status : "unknown";

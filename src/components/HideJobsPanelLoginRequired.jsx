@@ -17,9 +17,10 @@ const HideJobsPanelLoginRequired = () => {
   };
 
   return (
-    <div className="flex items-center justify-center h-full text-center space-y-4">
-      <div>
-        <p className="text-sm mb-4 text-gray-600">
+    <div className="flex flex-col h-full justify-between text-center">
+      {/* Main content in the middle */}
+      <div className="flex flex-col items-center justify-center flex-grow space-y-4">
+        <p className="text-sm text-gray-600">
           Please log in or sign up to continue.
         </p>
         <div className="flex gap-2 justify-center">
@@ -31,6 +32,12 @@ const HideJobsPanelLoginRequired = () => {
           </Button>
         </div>
       </div>
+
+      {/* Disclaimer at the very bottom */}
+      <p className="text-xs text-hidejobs-700 mb-4 px-4">
+        HideJobs offers free features and full access from <strong>$4.99/month </strong>
+        with a <strong>7-day free trial</strong> — no payment details needed.
+      </p>
     </div>
   );
 };

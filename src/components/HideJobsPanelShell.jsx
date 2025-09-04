@@ -566,15 +566,13 @@ const HideJobsPanelShell = ({ currentHref }) => {
           </div>
         </div>
 
-        {/* NEW - This allows child components to expand properly: */}
-        <div className="flex-1 flex flex-col overflow-hidden px-4 py-4 text-sm">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 text-sm">
           {panelView === "companies" ? (
             <CompaniesHideList />
           ) : panelView === "reposted" ? (
-            <div className="flex-1 flex flex-col min-h-0">
-              <RepostedPanel />
-            </div>
-          ) : panelView === "help" ? (
+            <RepostedPanel />
+          ) : panelView === "help" ? ( // ← NEW
             <HideJobsHelpPanel />
           ) : isLoggedIn ? (
             panelView === "filters" ? <HideJobsFilters /> : content

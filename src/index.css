@@ -31,6 +31,7 @@
   border-color: #feb700 !important;
   color: #333333 !important;
   font-weight: 500;
+  box-shadow: 0 0 15px #feb6006a !important;
 }
 
 .ai-button:hover,

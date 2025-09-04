@@ -38,6 +38,8 @@ function CountBadge({ count }) {
 }
 
 export default function KeywordFilterPanel({ visible }) {
+  const [modal, modalContextHolder] = Modal.useModal();
+
   const chromeApi = useMemo(getChrome, []);
   const [keywords, setKeywords] = useState([]);
   const [input, setInput] = useState("");
@@ -222,7 +224,7 @@ export default function KeywordFilterPanel({ visible }) {
 
   const showConfirmClear = (e) => {
     e.stopPropagation(); // don't trigger drag
-    Modal.confirm({
+    modal.confirm({
       title: "Clear all keywords?",
       content: "This will remove all keywords from the list.",
       okText: "Clear",
@@ -240,6 +242,7 @@ export default function KeywordFilterPanel({ visible }) {
 
   return (
     <div ref={wrapperRef} style={wrapperStyle} onMouseDown={onMouseDown}>
+      {modalContextHolder}
       <Card
         size="small"
         style={{

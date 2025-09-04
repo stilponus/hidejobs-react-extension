@@ -5,6 +5,7 @@ import HideJobsPanelShell from "../components/HideJobsPanelShell";
 import BadgesHost from "../components/BadgesHost";
 import KeywordFilterPanel from "../components/KeywordFilterPanel";
 import FilterByHoursPanel from "../components/FilterByHoursPanel.jsx";
+import ReviewPromptGate from "../components/ReviewPromptGate.jsx";
 import { StyleProvider } from "antd-style";
 import { ConfigProvider } from "antd";
 import tailwindCss from "../index.css?inline";
@@ -299,6 +300,9 @@ function clearRepostedBadgesFromDOM() {
               colorSuccess: "#009966",
               fontFamily: "Inter, sans-serif",
               zIndexPopupBase: 10000,
+              colorError: "#d40048",
+              colorErrorHover: "#e63961",
+              colorErrorActive: "#a80032",
             },
             components: {
               Button: {
@@ -308,6 +312,11 @@ function clearRepostedBadgesFromDOM() {
                 colorError: "#d40048",
                 colorErrorHover: "#b3003b",
                 colorErrorActive: "#990032",
+              },
+              Message: {
+                colorError: "#c10008",
+                colorSuccess: "#008236",
+                colorInfo: "#28507c",
               },
               Dropdown: {
                 colorBgElevated: "#ffffff",
@@ -328,8 +337,8 @@ function clearRepostedBadgesFromDOM() {
                 contentPadding: "0px 0px",
               },
               Rate: {
-              starColor: "#f59e0b", // Tailwind amber-500
-            },
+                starColor: "#f59e0b", // Tailwind amber-500
+              },
             },
           }}
         >
@@ -342,6 +351,7 @@ function clearRepostedBadgesFromDOM() {
           {/* Floating panels */}
           <KeywordFilterPanel visible={shouldShowKeywordPanel} />
           <FilterByHoursPanel visible={shouldShowHoursPanel} />
+          <ReviewPromptGate />
         </ConfigProvider>
       </StyleProvider>
     );
