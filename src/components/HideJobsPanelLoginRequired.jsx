@@ -34,7 +34,7 @@ const HideJobsPanelLoginRequired = () => {
       </div>
 
       {/* Disclaimer at the very bottom */}
-      <p className="text-xs text-hidejobs-700 mb-4 px-4">
+      <p className="mt-8 text-xs text-gray-400 mb-4 px-4">
         HideJobs offers free features and full access from <strong>$4.99/month </strong>
         with a <strong>7-day free trial</strong> — no payment details needed.
       </p>

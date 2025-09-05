@@ -1,6 +1,7 @@
 // src/components/ReviewPromptGate.jsx
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal } from "antd";
+import { StarFilled } from "@ant-design/icons";
 import Logo from "../assets/Logo.jsx";
 
 /**
@@ -8,8 +9,18 @@ import Logo from "../assets/Logo.jsx";
  * - Checks local storage for activationDate, counters, uid
  * - Shows a review modal on schedule
  * - Updates counters when shown
+ *
+ * Notes:
+ * - We use <Modal /> (NOT Modal.confirm) so we get the standard header + X close.
+ * - We still create modalContextHolder from Modal.useModal() and return it
+ *   so AntD’s modal context/theme tokens are guaranteed in the shadow DOM.
  */
-export default function ReviewPromptGate() {
+export default function ReviewPromptGate({ getContainer }) {
+  const [open, setOpen] = useState(false);
+
+  // Keep modal context holder so theme tokens apply (even if we don't call api.*)
+  const [, modalContextHolder] = Modal.useModal();
+
   useEffect(() => {
     let cancelled = false;
 
@@ -51,49 +62,10 @@ export default function ReviewPromptGate() {
           reviewPromptCount: count + 1,
         });
 
-        // Show Ant Design modal
-        Modal.confirm({
-          title: null, // we'll render our own header with logo + name
-          icon: null,
-          content: (
-            <div style={{ textAlign: "center" }}>
-              {/* Header with logo + brand */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}>
-                <Logo style={{ height: 28, width: "auto" }} />
-                <span style={{ fontWeight: 600, fontSize: 18 }}>HideJobs</span>
-              </div>
-
-              <div style={{ marginBottom: 8, fontSize: 16, fontWeight: 600 }}>
-                Enjoying HideJobs?
-              </div>
-
-              <div style={{ marginBottom: 12, fontSize: 20, lineHeight: 1 }}>
-                {"★ ★ ★ ★ ★"}
-              </div>
-
-              <p style={{ marginBottom: 0 }}>
-                If HideJobs helps clean up your job feed, could you leave a quick review on the Chrome Web Store?
-                It takes ~10 seconds and really helps others find the extension.
-              </p>
-            </div>
-          ),
-          okText: "Leave a review",
-          cancelText: "Not now",
-          okButtonProps: { type: "primary" },
-          centered: true,
-          width: 420,
-          onOk: () => {
-            chrome.runtime.sendMessage({
-              type: "open-tab",
-              url: "https://chromewebstore.google.com/detail/hide-companies-promoted-a/lbpfijpapbbpdmniijjbbhgaagoiihkg/reviews",
-            });
-          },
-          onCancel: () => {
-            // no tracking, just close
-          },
-        });
-      } catch (err) {
-        // Fail silently
+        // Open the normal modal (with header + close X)
+        setOpen(true);
+      } catch {
+        // silent fail
       }
     })();
 
@@ -102,5 +74,58 @@ export default function ReviewPromptGate() {
     };
   }, []);
 
-  return null; // renders nothing, just runs effect
+  const containerEl = typeof getContainer === "function" ? getContainer() : undefined;
+
+  return (
+    <>
+      {/* Keep AntD modal context holder so theme/tokens apply in shadow DOM */}
+      {modalContextHolder}
+
+      <Modal
+        open={open}
+        onCancel={() => setOpen(false)}
+        onOk={() => {
+          setOpen(false);
+          chrome.runtime.sendMessage({
+            type: "open-tab",
+            url: "https://chromewebstore.google.com/detail/hide-companies-promoted-a/lbpfijpapbbpdmniijjbbhgaagoiihkg/reviews",
+          });
+        }}
+        okText="Leave a review"
+        cancelText="Not now"
+        centered
+        width={420}
+        // Make sure the modal mounts INSIDE your shadow root, so it picks up ConfigProvider theme
+        getContainer={containerEl}
+        // Standard header with X is shown by default (closable=true)
+        title={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Logo style={{ height: 32, width: "auto" }} />
+            <span className="text-hidejobs-700" style={{ fontWeight: 600, fontSize: 18 }}>
+              HideJobs
+            </span>
+          </div>
+        }
+        afterClose={() => setOpen(false)}
+        maskClosable
+      >
+        <div style={{ textAlign: "center" }}>
+          <div style={{ marginBottom: 8, fontSize: 16, fontWeight: 600 }}>
+            Enjoying HideJobs?
+          </div>
+
+          {/* Stars use your utilities for size + color */}
+          <div style={{ marginBottom: 12, lineHeight: 1 }}>
+            {[...Array(5)].map((_, i) => (
+              <StarFilled key={i} className="icon-18 text-amber-500" style={{ marginRight: 4 }} />
+            ))}
+          </div>
+
+          <p style={{ marginBottom: 0 }}>
+            Please, leave a quick review — it takes only a few seconds and helps others discover the extension.
+          </p>
+        </div>
+      </Modal>
+    </>
+  );
 }

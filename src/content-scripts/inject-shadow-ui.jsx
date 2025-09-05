@@ -351,7 +351,7 @@ function clearRepostedBadgesFromDOM() {
           {/* Floating panels */}
           <KeywordFilterPanel visible={shouldShowKeywordPanel} />
           <FilterByHoursPanel visible={shouldShowHoursPanel} />
-          <ReviewPromptGate />
+          <ReviewPromptGate getContainer={() => container} />
         </ConfigProvider>
       </StyleProvider>
     );

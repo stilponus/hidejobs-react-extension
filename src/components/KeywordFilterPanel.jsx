@@ -175,7 +175,7 @@ export default function KeywordFilterPanel({ visible }) {
   const onMouseMove = (e) => {
     if (!dragging || !wrapperRef.current) return;
     const el = wrapperRef.current;
-    const width = el.offsetWidth || 320;
+    const width = el.offsetWidth || 290;
     const height = el.offsetHeight || 10;
 
     const left = e.clientX - dragOffsetRef.current.x;
@@ -216,7 +216,7 @@ export default function KeywordFilterPanel({ visible }) {
     position: "fixed",
     top: `${pos.top}px`,
     left: `${pos.left}px`,
-    width: 320,
+    width: 290,
     zIndex: 9995,
     cursor: dragging ? "grabbing" : "grab",
     userSelect: dragging ? "none" : "auto",
@@ -309,7 +309,7 @@ export default function KeywordFilterPanel({ visible }) {
                 style={{
                   display: "flex",
                   flexWrap: "wrap",
-                  gap: 8,
+                  gap: 0,
                   maxHeight: 202,
                   overflowY: "auto",
                 }}
@@ -340,7 +340,7 @@ export default function KeywordFilterPanel({ visible }) {
 }
 
 /** Clamp a position to keep the panel at least 5px inside the viewport */
-function clampToViewport(pos, el, widthFallback = 320, heightFallback = 10) {
+function clampToViewport(pos, el, widthFallback = 290, heightFallback = 10) {
   const margin = 5;
   const w = window.innerWidth;
   const h = window.innerHeight;

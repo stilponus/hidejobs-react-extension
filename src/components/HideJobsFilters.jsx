@@ -801,7 +801,7 @@ export default function HideJobsFilters({ currentHref }) {
       </div>
 
       {showReloadSuggestion && (
-        <div className="mb-3 px-3 py-2 bg-yellow-50 border border-yellow-300 rounded-md text-yellow-800">
+        <div className="px-3 py-2 bg-yellow-50 border border-yellow-300 rounded-md text-yellow-800">
           <div>
             <span className="text-sm">
               Filters are ON, but nothing was hidden — either nothing to hide, or you may need to refresh.
